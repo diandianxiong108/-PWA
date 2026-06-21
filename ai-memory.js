@@ -43,9 +43,18 @@ function buildPrompt(appData){userProfile.syncPlanner(appData);const profile=use
 
 function nextSuggestion(appData){const p=userProfile.load();if(!p.preferences.proactivePush)return null;const today=dayKey(new Date()),already=appData?.v2?.dayPlans?.[today]?.items||[],rules=p.learnedRules.filter(x=>x.signal==='prefer'),tasks=appData?.tasks||[];let candidate=rules.map(r=>tasks.find(t=>r.rule.includes(t.title))).find(Boolean);if(!candidate){const history={};Object.values(appData?.v2?.dayPlans||{}).forEach(plan=>(plan.items||[]).filter(x=>x.status==='done').forEach(x=>history[x.title]=(history[x.title]||0)+1));const title=Object.entries(history).sort((a,b)=>b[1]-a[1]).find(([name])=>!already.some(x=>x.title===name))?.[0];candidate=tasks.find(t=>t.title===title)||title&&{title,type:'每日'}}if(!candidate||already.some(x=>x.title===candidate.title))return null;return{title:candidate.title,type:candidate.type||'每日',time:p.preferences.suggestionTime,text:`最近常在推进「${candidate.title}」，今天要继续吗？`}}
 
+function exportAll(){return{profile:userProfile.load(),weeklySummary:weeklySummary.load(),feedbackLog:feedbackLog.load()}}
+function importAll(bundle){
+  if(!bundle||typeof bundle!=='object')return false;
+  if(bundle.profile)save(KEYS.profile,Object.assign(userProfile.defaults(),bundle.profile,{preferences:Object.assign(userProfile.defaults().preferences,bundle.profile.preferences||{})}));
+  if(Array.isArray(bundle.weeklySummary))save(KEYS.weeks,bundle.weeklySummary.slice(-MAX_WEEKS));
+  if(Array.isArray(bundle.feedbackLog))save(KEYS.feedback,bundle.feedbackLog.slice(-MAX_FEEDBACK));
+  return true
+}
+
 function injectUI(appData){
   const oldSummary=document.getElementById('chatSummaryBtn');if(oldSummary)oldSummary.style.display='none';
-  const toolbar=document.querySelector('.chat-toolbar');if(toolbar&&!document.getElementById('aiWeekSummaryBtn')){const week=document.createElement('button');week.id='aiWeekSummaryBtn';week.textContent='本周摘要';week.addEventListener('click',()=>{const result=weeklySummary.generate(appData);window.v2Toast?.('本周摘要已生成');alert(result.text)});const memory=document.createElement('button');memory.id='aiMemoryBtn';memory.textContent='我的记忆';memory.addEventListener('click',()=>showMemory(appData));toolbar.prepend(memory);toolbar.prepend(week)}
+  const toolbar=document.querySelector('.chat-toolbar');if(toolbar&&!document.getElementById('aiWeekSummaryBtn')){const week=document.createElement('button');week.id='aiWeekSummaryBtn';week.textContent='生成本周摘要';week.addEventListener('click',()=>{const result=weeklySummary.generate(appData);window.v2Toast?.('本周摘要已生成');alert(result.text)});const memory=document.createElement('button');memory.id='aiMemoryBtn';memory.textContent='查看我的记忆';memory.addEventListener('click',()=>showMemory(appData));toolbar.prepend(memory);toolbar.prepend(week)}
   if(!document.getElementById('aiMemoryPopup')){const popup=document.createElement('div');popup.id='aiMemoryPopup';popup.className='summary-popup ai-memory-popup';popup.innerHTML='<div class="box"><h3>🧠 AI 对我的记忆</h3><div id="aiMemoryBody"></div><div class="v2-row end"><button class="close-btn" id="aiMemoryClose">关闭</button></div></div>';document.body.appendChild(popup);document.getElementById('aiMemoryClose').addEventListener('click',()=>popup.classList.remove('show'));popup.addEventListener('click',e=>{if(e.target===popup)popup.classList.remove('show')})}
   const newChat=document.getElementById('chatNewBtn');if(newChat&&!newChat.dataset.memoryHook){newChat.dataset.memoryHook='1';newChat.addEventListener('click',()=>{if(typeof chatHistory!=='undefined'&&chatHistory.length){const digest=chatHistory.slice(-10).map(x=>`${x.role==='user'?'我':'AI'}：${x.content}`).join('\n').slice(0,1200);weeklySummary.addConversationDigest(digest)}},{capture:true})}
   installFeedbackButtons(appData)
@@ -55,5 +64,5 @@ function showMemory(appData){const p=userProfile.load(),weeks=weeklySummary.load
 function installFeedbackButtons(appData){const enhance=()=>document.querySelectorAll('.chat-suggest-item').forEach((row,index)=>{if(row.dataset.memoryReady)return;row.dataset.memoryReady='1';const add=row.querySelector('[data-chat-add]');if(!add)return;add.textContent='✅ 采纳';const skip=document.createElement('button');skip.className='chat-add-btn ai-skip-btn';skip.textContent='跳过';skip.addEventListener('click',()=>{const suggestion=JSON.parse(add.dataset.chatAdd||'{}');feedbackLog.record('skipped',suggestion,{energy:appData.todayStatus?.energy,freeTime:appData.todayStatus?.freeTime,source:'ai-chat'});row.remove()});add.addEventListener('click',()=>{const suggestion=JSON.parse(add.dataset.chatAdd||'{}');feedbackLog.record('accepted',suggestion,{energy:appData.todayStatus?.energy,freeTime:appData.todayStatus?.freeTime,source:'ai-chat'})},{once:true});row.appendChild(skip)});new MutationObserver(enhance).observe(document.getElementById('chatMessages'),{childList:true,subtree:true});enhance()}
 
 function init(appData){userProfile.syncPlanner(appData);weeklySummary.autoRoll(appData);injectUI(appData);return{profile:userProfile.load(),currentWeek:weeklySummary.current()}}
-window.AIMemorySystem={init,userProfile,weeklySummary,feedbackLog,buildPrompt,nextSuggestion,showMemory};
+window.AIMemorySystem={init,userProfile,weeklySummary,feedbackLog,buildPrompt,nextSuggestion,showMemory,exportAll,importAll};
 })();

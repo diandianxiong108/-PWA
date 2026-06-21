@@ -23,12 +23,15 @@ function defaultV2(){return{
   schemaVersion:2,
   createdAt:nowISO(),
   dayPlans:{},
+  archives:{daySummaries:[],ocrCleanupLog:[]},
   planner:{
     profile:{maxTaskTypes:3,insertLowResistance:true,choresPerDay:1,quietStart:'22:30',quietEnd:'07:30',principles:'一天不超过三种任务类型；精力低时优先低阻力任务；家务少量穿插。'},
     batches:[],activeBatchId:null,habitSignals:{},suggestions:[]
   },
   financeLink:{category:'保研小红书主包',wishId:null,linkedEntryIds:[],pendingEntryIds:[]},
   notifications:{regularEnabled:true,alarmEnabled:true,nativeReady:false,scheduled:{}},
+  reviewMeta:{generatedKeys:[],lastAutoCheck:null,pending:[]},
+  cloud:{provider:'jsonbin',binId:'',apiKey:'',lastUploadedAt:null,lastRestoreAt:null,lastCompressedAt:null,remoteDigest:null,lastError:null},
   migration:{source:null,migratedAt:null,legacyHistoryUnavailable:true}
 }}
 
@@ -40,6 +43,9 @@ function ensureDataShape(){
   appData.v2.planner.profile=Object.assign(defaults.planner.profile,appData.v2.planner.profile||{});
   appData.v2.financeLink=Object.assign(defaults.financeLink,appData.v2.financeLink||{});
   appData.v2.notifications=Object.assign(defaults.notifications,appData.v2.notifications||{});
+  appData.v2.reviewMeta=Object.assign(defaults.reviewMeta,appData.v2.reviewMeta||{});
+  appData.v2.cloud=Object.assign(defaults.cloud,appData.v2.cloud||{});
+  appData.v2.archives=Object.assign(defaults.archives,appData.v2.archives||{});
   appData.v2.dayPlans=appData.v2.dayPlans||{};
   appData.tasks=Array.isArray(appData.tasks)?appData.tasks:[];
   appData.inspirations=Array.isArray(appData.inspirations)?appData.inspirations:[];
@@ -180,7 +186,7 @@ function injectShell(){
   window.addEventListener('popstate',()=>{if(routeState)closeRouteInternal()});
   document.getElementById('v2ImportBtn').addEventListener('click',()=>document.getElementById('v2ImportInput').click());
   document.getElementById('v2ImportInput').addEventListener('change',importV2);
-  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-row';tools.style.marginTop='10px';tools.innerHTML='<button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button>';settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission)}
+  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML='<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder=\"输入 X-Master-Key\" type=\"password\"></label><div class=\"v2-row\" style=\"flex-wrap:wrap\"><button class=\"v2-secondary\" id=\"v2CloudUpload\">上传云端</button><button class=\"v2-secondary\" id=\"v2CloudRestore\">恢复云端</button><button class=\"v2-secondary\" id=\"v2CloudUploadCompress\">上传后压缩本地</button><button class=\"v2-secondary\" id=\"v2CloudCompress\">仅压缩本地旧记录</button></div><div id=\"v2CloudStatus\" class=\"hint\"></div></div></div>';settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm()}
   buildPlanner();injectRecordsTools();
 }
 
@@ -310,7 +316,135 @@ async function recognizeOCR(){const file=document.getElementById('v2OcrFile').fi
   else{const imageDataUrl=await prepareOCRImage(file);const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});if(!res.ok)throw new Error('OCR_NOT_CONFIGURED');const data=await res.json();document.getElementById('v2OcrText').value=data.text||'';toast('识别完成，请检查文字')}
  }catch(e){toast('当前识别服务尚未配置，可先在文本框中修改录入')}finally{btn.disabled=false;btn.textContent='识别图片'}}
 async function prepareOCRImage(file){const bitmap=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();return canvas.toDataURL('image/jpeg',.88)}
-function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO()}))}else{const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false}))}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
+function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr'})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO(),source:'ocr'}))}else{const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false,source:'ocr'}))}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
+
+function reviewStatusEl(){return document.getElementById('reviewStatus')}
+function setReviewStatus(text,isError){const el=reviewStatusEl();if(el){el.textContent=text||'';el.style.color=isError?'#d64b4b':'var(--text-l)'}}
+function startOfQuarter(d){return new Date(d.getFullYear(),Math.floor(d.getMonth()/3)*3,1)}
+function startOfHalfYear(d){return new Date(d.getFullYear(),d.getMonth()<6?0:6,1)}
+function endOfMonth(y,m){return new Date(y,m+1,0)}
+function fmtDate(d){return dateKey(d)}
+function periodMeta(kind,anchor=new Date(),completedOnly=false){
+  const now=new Date(anchor),meta={kind,label:'复盘',start:null,end:null,key:''};
+  if(kind==='week'){const start=new Date(now);const day=start.getDay()||7;start.setDate(start.getDate()-day+1);const end=new Date(completedOnly?start:new Date());if(completedOnly)end.setDate(start.getDate()+6);meta.label=completedOnly?'上周复盘':'本周复盘';meta.start=start;meta.end=end;meta.key=`week:${fmtDate(start)}`;if(completedOnly){start.setDate(start.getDate()-7);end.setDate(end.getDate()-7);meta.start=start;meta.end=end;meta.key=`week:${fmtDate(start)}`}}
+  if(kind==='month'){let y=now.getFullYear(),m=now.getMonth();if(completedOnly){m-=1;if(m<0){m=11;y-=1}}meta.label=completedOnly?'月度复盘':'本月复盘';meta.start=new Date(y,m,1);meta.end=completedOnly?endOfMonth(y,m):now;meta.key=`month:${y}-${String(m+1).padStart(2,'0')}`}
+  if(kind==='quarter'){let y=now.getFullYear(),q=Math.floor(now.getMonth()/3);if(completedOnly){q-=1;if(q<0){q=3;y-=1}}meta.label=completedOnly?'季度复盘':'本季度复盘';meta.start=new Date(y,q*3,1);meta.end=completedOnly?new Date(y,q*3+3,0):now;meta.key=`quarter:${y}-Q${q+1}`}
+  if(kind==='halfyear'){let y=now.getFullYear(),h=now.getMonth()<6?0:1;if(completedOnly){h-=1;if(h<0){h=1;y-=1}}meta.label=completedOnly?(h===0?'上半年复盘':'下半年复盘'):(h===0?'上半年进行中':'下半年进行中');meta.start=new Date(y,h===0?0:6,1);meta.end=completedOnly?new Date(y,h===0?5:11,h===0?30:31):now;meta.key=`halfyear:${y}-H${h+1}`}
+  if(kind==='year'){const y=completedOnly?now.getFullYear()-1:now.getFullYear();meta.label=completedOnly?`${y} 年复盘`:'今年复盘';meta.start=new Date(y,0,1);meta.end=completedOnly?new Date(y,11,31):now;meta.key=`year:${y}`}
+  return{...meta,startDate:fmtDate(meta.start),endDate:fmtDate(meta.end)}
+}
+function collectReviewPayload(startDate,endDate){
+  const items=[];Object.entries(appData.v2.dayPlans||{}).forEach(([date,plan])=>{if(date>=startDate&&date<=endDate)(plan.items||[]).forEach(item=>items.push({...item,date}))});
+  const completedTasks=items.filter(x=>x.status==='done').map(x=>({title:x.title,type:x.type||'任务',date:x.date,important:!!x.important})).slice(0,80);
+  const unfinished=items.filter(x=>x.status!=='done').map(x=>x.title).filter(Boolean).slice(0,30);
+  const inspirations=(appData.inspirations||[]).filter(i=>i.date&&i.date>=startDate&&i.date<=endDate).map(i=>i.text.slice(0,80)+(i.text.length>80?'...':'')).slice(0,20);
+  const notes=(appData.notes||[]).filter(n=>n.date&&n.date>=startDate&&n.date<=endDate).map(n=>(n.title||'随手记')+(n.text?'：'+n.text.slice(0,120):'')).slice(0,15);
+  return{tasks:completedTasks,inspirations,notes,unfinished}
+}
+async function generatePeriodReview(kind,options={}){
+  const meta=options.meta||periodMeta(kind,new Date(),!!options.completedOnly);
+  setReviewStatus(`⏳ 正在生成${meta.label}...`);
+  const payload=collectReviewPayload(meta.startDate,meta.endDate);
+  try{
+    const res=await fetch('/.netlify/functions/ai-review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks:payload.tasks,inspirations:payload.inspirations,notes:payload.notes,unfinished:payload.unfinished,period:{start:meta.startDate,end:meta.endDate,label:meta.label,kind}})});
+    if(!res.ok)throw new Error('REVIEW_FAILED');
+    const data=await res.json(),report=data.report||'暂无报告';
+    appData.reviews.unshift({id:genId(),period:meta.label,periodKind:kind,startDate:meta.startDate,endDate:meta.endDate,report,createdAt:nowISO(),autoGenerated:!!options.autoGenerated});
+    if(options.autoGenerated&&!appData.v2.reviewMeta.generatedKeys.includes(meta.key))appData.v2.reviewMeta.generatedKeys.push(meta.key);
+    appData.v2.reviewMeta.lastAutoCheck=nowISO();
+    persist();renderReviews?.();
+    setReviewStatus(`✅ ${meta.label} 已生成`);
+    return true
+  }catch(e){setReviewStatus(`❌ ${meta.label} 生成失败`,true);return false}
+}
+function enhanceReviewSection(){
+  const card=document.querySelector('#reviewSection .card');if(!card||document.getElementById('v2ReviewQuickBtns'))return;
+  const select=document.getElementById('reviewPeriod');if(select&&!select.querySelector('option[value="quarter"]'))select.insertAdjacentHTML('beforeend','<option value="quarter">本季度</option><option value="halfyear">近半年</option><option value="year">今年</option>');
+  const row=document.createElement('div');row.id='v2ReviewQuickBtns';row.className='v2-row';row.style.marginTop='8px';row.style.flexWrap='wrap';
+  row.innerHTML='<button class="v2-secondary" data-review-kind="month">手动月复盘</button><button class="v2-secondary" data-review-kind="quarter">手动季度复盘</button><button class="v2-secondary" data-review-kind="halfyear">手动半年复盘</button><button class="v2-secondary" data-review-kind="year">手动年度复盘</button>';
+  card.appendChild(row);
+  row.querySelectorAll('[data-review-kind]').forEach(btn=>btn.addEventListener('click',()=>generatePeriodReview(btn.dataset.reviewKind,{completedOnly:false})));
+  window.generateReview=async function(){
+    const period=document.getElementById('reviewPeriod')?.value||'week';
+    if(period==='custom'){
+      const start=document.getElementById('reviewStart')?.value,end=document.getElementById('reviewEnd')?.value;
+      if(!start||!end){setReviewStatus('请选择起止日期',true);return}
+      await generatePeriodReview('custom',{meta:{label:'自定义复盘',startDate:start,endDate:end,key:`custom:${start}:${end}`}})
+      return
+    }
+    await generatePeriodReview(period,{completedOnly:false})
+  }
+}
+async function autoGeneratePeriodicReviews(){
+  const kinds=['month','quarter','halfyear','year'];
+  for(const kind of kinds){
+    const meta=periodMeta(kind,new Date(),true);
+    if(meta.endDate>=todayStr())continue;
+    if(appData.v2.reviewMeta.generatedKeys.includes(meta.key))continue;
+    await generatePeriodReview(kind,{completedOnly:true,autoGenerated:true,meta})
+  }
+}
+function syncCloudForm(){
+  const bin=document.getElementById('v2CloudBinId'),key=document.getElementById('v2CloudApiKey'),cloud=appData.v2.cloud||{};
+  if(bin)bin.value=cloud.binId||'';
+  if(key)key.value=cloud.apiKey||'';
+  updateCloudStatus(cloud.lastError?`上次云端操作失败：${cloud.lastError}`:cloud.lastUploadedAt?`最近上传：${cloud.lastUploadedAt.slice(0,16).replace('T',' ')}`:'尚未上传到云端')
+}
+function updateCloudStatus(text){const el=document.getElementById('v2CloudStatus');if(el)el.textContent=text||''}
+function readCloudForm(){
+  const cloud=appData.v2.cloud||{},bin=document.getElementById('v2CloudBinId')?.value.trim(),key=document.getElementById('v2CloudApiKey')?.value.trim();
+  if(bin!==undefined&&bin)cloud.binId=bin;
+  if(key!==undefined&&key)cloud.apiKey=key;
+  appData.v2.cloud=cloud;persist();
+  return cloud
+}
+function buildCloudBundle(){
+  syncTodaySnapshot();
+  return{exportedAt:nowISO(),schemaVersion:2,appData:clone(appData),aiMemory:window.AIMemorySystem?.exportAll?.()||null}
+}
+function importCloudBundle(bundle){
+  if(!bundle?.appData||!Array.isArray(bundle.appData.tasks))throw new Error('INVALID_BUNDLE');
+  Object.keys(appData).forEach(k=>delete appData[k]);
+  Object.assign(appData,clone(bundle.appData));
+  ensureDataShape();
+  window.AIMemorySystem?.importAll?.(bundle.aiMemory||{});
+  persist();syncTodaySnapshot();render();renderPlanner();renderFinanceLink();renderReviews?.();syncCloudForm();
+}
+function compressLocalData(){
+  const threshold=new Date();threshold.setDate(threshold.getDate()-60);const ocrThreshold=new Date();ocrThreshold.setDate(ocrThreshold.getDate()-45);
+  let archivedDays=0,removedOcrNotes=0;
+  Object.keys(appData.v2.dayPlans||{}).forEach(ds=>{if(ds>=fmtDate(threshold))return;const plan=appData.v2.dayPlans[ds];if(!plan||!plan.items?.length)return;appData.v2.archives.daySummaries.push({date:ds,total:plan.items.length,done:plan.items.filter(x=>x.status==='done').length,titles:plan.items.slice(0,8).map(x=>x.title),archivedAt:nowISO()});delete appData.v2.dayPlans[ds];archivedDays++});
+  appData.v2.archives.daySummaries=appData.v2.archives.daySummaries.sort((a,b)=>a.date.localeCompare(b.date)).slice(-180);
+  appData.notes=(appData.notes||[]).filter(note=>{const tag=note.source==='ocr'||note.title==='手写识别';if(!tag||!note.date||note.date>=fmtDate(ocrThreshold))return true;removedOcrNotes++;appData.v2.archives.ocrCleanupLog.push({id:note.id,date:note.date,title:note.title||'手写识别',removedAt:nowISO()});return false});
+  appData.v2.archives.ocrCleanupLog=appData.v2.archives.ocrCleanupLog.slice(-300);
+  appData.v2.cloud.lastCompressedAt=nowISO();persist();
+  return{archivedDays,removedOcrNotes}
+}
+async function uploadCloudBackup(options={}){
+  const cloud=readCloudForm();if(!cloud.binId||!cloud.apiKey){updateCloudStatus('请先填写 Bin ID 和 API Key');return}
+  updateCloudStatus('正在上传到云端…');
+  const bundle=buildCloudBundle();
+  try{
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${encodeURIComponent(cloud.binId)}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':cloud.apiKey},body:JSON.stringify(bundle)});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    cloud.lastUploadedAt=nowISO();cloud.remoteDigest=`${(bundle.appData.tasks||[]).length}任务/${Object.keys(bundle.appData.v2?.dayPlans||{}).length}天`;cloud.lastError=null;persist();
+    let suffix='';if(options.compressAfter){const result=compressLocalData();suffix=`，并已压缩本地：${result.archivedDays} 天计划、${result.removedOcrNotes} 条旧 OCR`}
+    updateCloudStatus(`上传成功：${cloud.lastUploadedAt.slice(0,16).replace('T',' ')}${suffix}`);toast('云端备份已完成')
+  }catch(e){cloud.lastError=String(e.message||e);persist();updateCloudStatus(`上传失败：${cloud.lastError}`)}
+}
+async function restoreCloudBackup(){
+  const cloud=readCloudForm();if(!cloud.binId||!cloud.apiKey){updateCloudStatus('请先填写 Bin ID 和 API Key');return}
+  if(!confirm('将用云端备份覆盖当前 V2 数据，但不会影响原版。继续吗？'))return;
+  updateCloudStatus('正在从云端恢复…');
+  try{
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${encodeURIComponent(cloud.binId)}/latest`,{headers:{'X-Master-Key':cloud.apiKey}});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json(),bundle=data.record||data;
+    importCloudBundle(bundle);
+    appData.v2.cloud.lastRestoreAt=nowISO();appData.v2.cloud.lastError=null;persist();
+    updateCloudStatus(`恢复成功：${appData.v2.cloud.lastRestoreAt.slice(0,16).replace('T',' ')}`);toast('已恢复云端备份')
+  }catch(e){appData.v2.cloud.lastError=String(e.message||e);persist();updateCloudStatus(`恢复失败：${appData.v2.cloud.lastError}`)}
+}
 
 function nativePlugins(){return window.Capacitor?.Plugins||null}
 function getTaskReminderDate(task){
@@ -375,15 +509,17 @@ function schedulePendingReminders(){
 }
 function scheduleAIMemorySuggestion(){const ai=window.AIMemorySystem,suggestion=ai?.nextSuggestion(appData);if(!suggestion||!appData.v2.notifications.nativeReady)return;const key='tm_ai_last_proactive_push',today=todayStr();if(localStorage.getItem(key)===today)return;let date=today,time=suggestion.time||'09:00',at=new Date(`${date}T${time}:00`);if(at<=new Date()){at=new Date(Date.now()+60000);date=dateKey(at);time=`${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`}scheduleItem({id:'ai-proactive-'+today,title:suggestion.text,type:suggestion.type,plannedStart:time,important:false,reminderMode:'notification'},date);localStorage.setItem(key,today)}
 
-function exportV2(){syncTodaySnapshot();persist();const payload=JSON.stringify(appData,null,2),blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`task-manager-v2-backup-${todayStr()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('完整备份已导出')}
-async function importV2(event){const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!data||typeof data!=='object'||!Array.isArray(data.tasks))throw new Error();if(!confirm('导入内容会写入 V2 独立副本，不会修改原版。继续吗？'))return;Object.keys(appData).forEach(k=>delete appData[k]);Object.assign(appData,data);ensureDataShape();appData.v2.migration={source:'manual-json-import',migratedAt:nowISO(),legacyHistoryUnavailable:!data.v2};persist();syncTodaySnapshot();render();renderPlanner();renderFinanceLink();document.getElementById('v2ImportBanner').classList.add('v2-hidden');toast('已导入 V2 独立副本')}catch(e){alert('文件无法识别，请使用原版导出的 JSON 文件')}}
+function exportV2(){syncTodaySnapshot();persist();const payload=JSON.stringify(buildCloudBundle(),null,2),blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`task-manager-v2-backup-${todayStr()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('完整备份已导出')}
+async function importV2(event){const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());const bundle=data?.appData?data:{appData:data,aiMemory:null};if(!bundle?.appData||typeof bundle.appData!=='object'||!Array.isArray(bundle.appData.tasks))throw new Error();if(!confirm('导入内容会写入 V2 独立副本，不会修改原版。继续吗？'))return;importCloudBundle(bundle);appData.v2.migration={source:'manual-json-import',migratedAt:nowISO(),legacyHistoryUnavailable:!data.v2};persist();document.getElementById('v2ImportBanner').classList.add('v2-hidden');toast('已导入 V2 独立副本')}catch(e){alert('文件无法识别，请使用导出的 JSON 备份文件')}}
 
 function captureLegacyActions(){document.addEventListener('click',e=>{const btn=e.target.closest('[data-action]');if(!btn)return;const action=btn.dataset.action,id=btn.dataset.id;if(action==='temp-done'){const task=appData.tasks.find(x=>x.id===id);if(task){const item=itemFromTask(task,todayStr());item.status='done';item.completedAt=nowISO();upsertPlanItem(todayStr(),item)}}},true)}
 
 window.v2Boot=function(){
-  patchLegacyHooks();const source=loadIsolatedData();injectShell();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);persist();render();
+  patchLegacyHooks();const source=loadIsolatedData();injectShell();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
   if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
+  autoGeneratePeriodicReviews();
+  syncCloudForm();
   initNativeNotifications().then(()=>{schedulePendingReminders();scheduleAIMemorySuggestion()});
 };
 })();
