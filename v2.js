@@ -17,6 +17,7 @@ function hashId(value){let h=0;for(let i=0;i<value.length;i++)h=((h<<5)-h+value.
 function toast(text){let el=document.getElementById('v2Toast');if(!el){el=document.createElement('div');el.id='v2Toast';el.className='v2-toast';document.body.appendChild(el)}el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200)}
 window.v2Toast=toast;
 window.openTaskCalendar=openTaskCalendar;
+window.syncTaskReminder=syncTaskReminder;
 
 function defaultV2(){return{
   schemaVersion:2,
@@ -152,11 +153,19 @@ function patchLegacyHooks(){
   checkDailyReset=function(){const ds=todayStr();if(appData.lastVisitDate!==ds){appData.tasks.forEach(t=>{if(t.type==='每日')t.completedToday=false;if(t.type==='临时')t.hiddenToday=false});appData.lastVisitDate=ds;syncTodaySnapshot();persist();render()}};
   getTasksForDate=function(date){return displayItems(dateKey(date)).map(x=>({id:x.id,color:COLOR[x.type]||COLOR.记录,title:x.title,timeLabel:x.timeLabel,status:x.status,important:x.important}))};
   getWeekTasksForDay=function(ds){return getTasksForDate(new Date(ds+'T12:00:00'))};
-  showDayTasks=function(value){const ds=dateKey(value);calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();openDaySheet(ds)};
+  showDayTasks=function(value){const ds=dateKey(value);calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)};
   exportData=exportV2;
   importData=importV2;
   const legacySaveBill=saveBill;
   saveBill=function(){const before=new Set(appData.records.entries.map(x=>x.id));legacySaveBill();appData.records.entries.filter(x=>!before.has(x.id)).forEach(linkFinanceEntry);persist();renderFinanceLink()};
+}
+function renderCalendarInlinePreview(ds){
+  const d=new Date(ds+'T12:00:00'),div=document.getElementById('calDayTasks'),items=displayItems(ds);
+  if(!div)return;
+  if(!items.length){div.classList.remove('show');return}
+  div.className='cal-day-tasks show';
+  div.innerHTML=`<div class="v2-cal-preview-head"><span>${d.getMonth()+1}月${d.getDate()}日 · 共 ${items.length} 项</span><button class="v2-secondary" id="v2OpenDayDetail">进入当天详情</button></div>`+items.map(item=>`<div class="task-item"><span class="task-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span>${esc(item.title)}</span><span class="v2-cal-type">${esc(item.type||'任务')}</span></div>`).join('');
+  document.getElementById('v2OpenDayDetail')?.addEventListener('click',()=>openDaySheet(ds));
 }
 
 function injectShell(){
@@ -190,7 +199,7 @@ function buildHomeLaunchers(){
 function beginRoute(title,icon,kind){
   if(routeState)closeRouteInternal(false);homeScroll=window.scrollY;const app=document.querySelector('.app'),page=document.getElementById('v2RoutePage'),body=document.getElementById('v2RouteBody');body.innerHTML='';app.classList.add('v2-hidden');page.classList.add('show');document.getElementById('v2RouteTitle').textContent=title;document.getElementById('v2RouteIcon').innerHTML=iconImg(icon,28);routeState={kind};window.scrollTo(0,0);history.pushState({v2Route:kind},'',`#/${kind}`);return body
 }
-function openModulePage(id){const cfg=HOME_ROUTES[id],section=document.getElementById(id);if(!cfg||!section)return;const body=beginRoute(cfg[0],cfg[1],id.replace('Section',''));const marker=document.createComment('v2-return-'+id);section.parentNode.insertBefore(marker,section);const cards=[...section.querySelectorAll('.card')],expandedStates=cards.map(c=>c.classList.contains('expanded'));routeState=Object.assign(routeState,{section,marker,wasCollapsed:section.classList.contains('collapsed'),cards,expandedStates});section.classList.remove('collapsed','v2-home-module');cards.forEach(c=>c.classList.add('expanded'));body.appendChild(section)}
+function openModulePage(id){const cfg=HOME_ROUTES[id],section=document.getElementById(id);if(!cfg||!section)return;const body=beginRoute(cfg[0],cfg[1],id.replace('Section',''));const marker=document.createComment('v2-return-'+id);section.parentNode.insertBefore(marker,section);const cards=[...section.querySelectorAll('.card')],expandedStates=cards.map(c=>c.classList.contains('expanded'));routeState=Object.assign(routeState,{section,marker,wasCollapsed:section.classList.contains('collapsed'),cards,expandedStates});section.classList.remove('collapsed','v2-home-module');cards.forEach(c=>c.classList.add('expanded'));body.appendChild(section);buildSectionQuickAdd(id)}
 function openPlannerPage(){const body=beginRoute('智能规划室','规划','planner'),planner=document.getElementById('v2Planner');routeState.planner=planner;body.appendChild(planner);renderPlanner()}
 function requestCloseRoute(){if(routeState)history.back()}
 function closeRouteInternal(restoreScroll=true){if(!routeState)return;const state=routeState;routeState=null;if(state.section){state.cards?.forEach((c,i)=>c.classList.toggle('expanded',state.expandedStates[i]));state.marker.parentNode.insertBefore(state.section,state.marker);state.marker.remove();state.section.classList.add('v2-home-module');state.section.classList.toggle('collapsed',state.wasCollapsed)}if(state.planner)document.getElementById('v2Parking').appendChild(state.planner);document.getElementById('v2RouteBody').innerHTML='';document.getElementById('v2RoutePage').classList.remove('show');document.querySelector('.app').classList.remove('v2-hidden');if(restoreScroll)requestAnimationFrame(()=>window.scrollTo(0,homeScroll))
@@ -218,6 +227,33 @@ function toggleDayItem(id){const item=materializeItem(selectedDay,id);if(!item)r
 function toggleImportant(id){const item=materializeItem(selectedDay,id);if(!item)return;item.important=!item.important;item.reminderMode=item.important?'alarm':'notification';persist();scheduleItem(item,selectedDay);renderDaySheet()}
 function addManualDayItem(){const title=document.getElementById('v2DayNewTitle').value.trim();if(!title){toast('先写下任务内容');return}const important=document.getElementById('v2DayNewImportant').checked;const item={id:'plan-'+genId(),title,type:document.getElementById('v2DayNewType').value,status:'todo',plannedStart:document.getElementById('v2DayNewTime').value,timeLabel:'',important,reminderMode:important?'alarm':'notification',alarmTime:document.getElementById('v2DayNewTime').value,createdAt:nowISO(),completedAt:null};upsertPlanItem(selectedDay,item);persist();scheduleItem(item,selectedDay);renderDaySheet();renderCalendar();toast('已加入当日计划')}
 function openDayItemCalendar(id){const item=materializeItem(selectedDay,id);if(!item){toast('没有找到这项任务');return}openTaskCalendar(item,selectedDay)}
+function buildSectionQuickAdd(sectionId){
+  const section=document.getElementById(sectionId);if(!section||section.querySelector('.v2-inline-add'))return;
+  const typeMap={dailySection:'每日',projectSection:'项目',cyclicSection:'循环',tempSection:'临时'};
+  const type=typeMap[sectionId];if(!type)return;
+  const wrap=document.createElement('div');wrap.className='v2-panel v2-inline-add';
+  if(type==='循环')wrap.innerHTML=`<h3>＋ 新增${type}</h3><div class="v2-fields"><input id="${sectionId}-title" placeholder="写下要循环做的事"><div class="v2-row"><input id="${sectionId}-cycle" type="number" min="1" value="2" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px" placeholder="每几天一次"><button class="v2-primary" id="${sectionId}-add">添加</button></div></div>`;
+  else wrap.innerHTML=`<h3>＋ 新增${type}</h3><div class="v2-fields"><input id="${sectionId}-title" placeholder="写下任务内容"><div class="v2-row">${type!=='每日'?'<input id="'+sectionId+'-time" type="time" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px">':''}<button class="v2-primary" id="${sectionId}-add">添加</button></div></div>`;
+  section.insertBefore(wrap,section.children[1]||null);
+  document.getElementById(`${sectionId}-add`).addEventListener('click',()=>addSectionTask(sectionId));
+}
+function addSectionTask(sectionId){
+  const typeMap={dailySection:'每日',projectSection:'项目',cyclicSection:'循环',tempSection:'临时'};
+  const type=typeMap[sectionId],title=document.getElementById(`${sectionId}-title`)?.value.trim();
+  if(!title){toast('先写下任务内容');return}
+  const task={id:genId(),type,title,scheduledStart:null,scheduledEnd:null,timeLabel:null,scheduledDate:null,alarmTime:null,remindBefore:null,departureTime:null};
+  if(type==='每日'){task.frequency='每天';task.subtask='';task.completedToday=false;task.lastCompletedDate=null;}
+  if(type==='项目'){task.steps=[{id:genId(),title:'第一步',duration:30,done:false}];task.reminderTime='22:30';task.isTiming=false;task.startTime=null;}
+  if(type==='循环'){task.cycleDays=Math.max(1,Number(document.getElementById(`${sectionId}-cycle`)?.value)||2);task.lastDoneDate=todayStr();}
+  if(type==='临时'){task.deadline=null;task.deadlineConfirmed=false;task.confirmInDays=3;task.confirmDate=daysLater(3);task.hiddenToday=false;task.priority=2;task.duration=null;task.scheduledDate=todayStr();}
+  const timeInput=document.getElementById(`${sectionId}-time`);
+  if(timeInput?.value){task.scheduledStart=timeInput.value;task.timeLabel=computeTimeLabel(timeInput.value);if(type==='临时'){task.alarmTime=timeInput.value;task.important=true}}
+  addTask(task);
+  document.getElementById(`${sectionId}-title`).value='';
+  if(timeInput)timeInput.value='';
+  if(routeState?.section?.id===sectionId)buildSectionQuickAdd(sectionId);
+  toast(`已新增${type}任务`);
+}
 
 function buildPlanner(){document.getElementById('v2Planner').innerHTML='<div class="v2-page-head"><div><h2>规划室</h2><p>长期习惯保留，任务批次按周更新</p></div></div><div id="v2PlannerContent"></div>'}
 function activeBatch(){return appData.v2.planner.batches.find(x=>x.id===appData.v2.planner.activeBatchId&&x.status==='active')||null}
@@ -277,6 +313,26 @@ async function prepareOCRImage(file){const bitmap=await createImageBitmap(file),
 function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO()}))}else{const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false}))}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
 
 function nativePlugins(){return window.Capacitor?.Plugins||null}
+function getTaskReminderDate(task){
+  if(!task)return null;
+  if(task.scheduledDate)return task.scheduledDate;
+  if(task.type==='临时')return todayStr();
+  if(task.type==='项目'||task.type==='每日')return todayStr();
+  if(task.type==='循环')return getCyclicNext(task);
+  return todayStr();
+}
+function buildReminderItemFromTask(task){
+  if(!task)return null;
+  const important=!!(task.important||(task.type==='临时'&&task.alarmTime));
+  return{id:'task-reminder-'+task.id,title:task.title,alarmTime:task.alarmTime||'',plannedStart:task.scheduledStart||'',important,reminderMode:important?'alarm':'notification'};
+}
+function syncTaskReminder(task){
+  const item=buildReminderItemFromTask(task),date=getTaskReminderDate(task);
+  if(!item||!date)return false;
+  if(!item.alarmTime&&!item.plannedStart)return false;
+  scheduleItem(item,date);
+  return true;
+}
 async function openTaskCalendar(task,dateOverride){
   const effectiveDate=dateOverride||task?.scheduledDate||selectedDay;
   const event=window.createCalendarEvent?.(task,effectiveDate);
@@ -313,7 +369,10 @@ async function scheduleItem(item,ds){if(!item.alarmTime&&!item.plannedStart)retu
   if(!nativeAlarm&&plugins?.LocalNotifications){await plugins.LocalNotifications.schedule({notifications:[{id:hashId(item.id),title:item.important?'重要任务':'任务提醒',body:item.title,schedule:{at,allowWhileIdle:true},channelId:item.important?'important-alarm':'regular-task',actionTypeId:'TASK_ACTIONS',ongoing:!!item.important,autoCancel:!item.important,extra:{itemId:item.id,date:ds}}]});appData.v2.notifications.nativeReady=true}
   appData.v2.notifications.scheduled[item.id]={at:at.toISOString(),mode:item.reminderMode};persist();
  }catch(e){appData.v2.notifications.nativeReady=false}}
-function schedulePendingReminders(){Object.entries(appData.v2.dayPlans).forEach(([ds,p])=>(p.items||[]).filter(x=>x.status!=='done').forEach(x=>scheduleItem(x,ds)))}
+function schedulePendingReminders(){
+  Object.entries(appData.v2.dayPlans).forEach(([ds,p])=>(p.items||[]).filter(x=>x.status!=='done').forEach(x=>scheduleItem(x,ds)));
+  appData.tasks.forEach(task=>syncTaskReminder(task));
+}
 function scheduleAIMemorySuggestion(){const ai=window.AIMemorySystem,suggestion=ai?.nextSuggestion(appData);if(!suggestion||!appData.v2.notifications.nativeReady)return;const key='tm_ai_last_proactive_push',today=todayStr();if(localStorage.getItem(key)===today)return;let date=today,time=suggestion.time||'09:00',at=new Date(`${date}T${time}:00`);if(at<=new Date()){at=new Date(Date.now()+60000);date=dateKey(at);time=`${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`}scheduleItem({id:'ai-proactive-'+today,title:suggestion.text,type:suggestion.type,plannedStart:time,important:false,reminderMode:'notification'},date);localStorage.setItem(key,today)}
 
 function exportV2(){syncTodaySnapshot();persist();const payload=JSON.stringify(appData,null,2),blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`task-manager-v2-backup-${todayStr()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('完整备份已导出')}
