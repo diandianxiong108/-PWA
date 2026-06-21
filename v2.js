@@ -16,6 +16,7 @@ function parseJSON(value,fallback){try{return JSON.parse(value)}catch(e){return 
 function hashId(value){let h=0;for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return Math.abs(h)||1}
 function toast(text){let el=document.getElementById('v2Toast');if(!el){el=document.createElement('div');el.id='v2Toast';el.className='v2-toast';document.body.appendChild(el)}el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200)}
 window.v2Toast=toast;
+window.openTaskCalendar=openTaskCalendar;
 
 function defaultV2(){return{
   schemaVersion:2,
@@ -202,11 +203,12 @@ function renderDaySheet(){
   const items=displayItems(selectedDay),done=items.filter(x=>x.status==='done').length;const past=selectedDay<todayStr();
   let html=`<div class="v2-day-summary"><span>${items.length} 项任务</span><span>${done} 项完成</span><span>${past?'历史回顾':selectedDay===todayStr()?'今天':'未来计划'}</span></div>`;
   if(past&&!getPlan(selectedDay,false))html+='<div class="v2-warning">旧版没有保存这一天的任务快照，因此只能显示当时实际保存下来的记录。V2 启用后的日期会完整保留。</div>';
-  html+=items.length?items.map(item=>`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button></div>`).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
+  html+=items.length?items.map(item=>`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><div class="v2-row" style="gap:6px;flex:0 0 auto"><button class="v2-secondary" data-v2-calendar="${esc(item.id)}" title="加入手机日历">日历</button><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button></div></div>`).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
   html+=`<div class="v2-panel"><h3>＋ 安排到这一天</h3><div class="v2-fields"><label>任务内容<input id="v2DayNewTitle" placeholder="要做什么"></label><div class="v2-grid"><label>类型<select id="v2DayNewType"><option>临时</option><option>每日</option><option>项目</option><option>循环</option></select></label><label>时间<input id="v2DayNewTime" type="time"></label></div><label><span><input id="v2DayNewImportant" type="checkbox"> 重要任务（闹钟式提醒）</span></label><button class="v2-primary" id="v2DayAdd">加入当日计划</button></div></div>`;
   const target=routeState?.kind==='day'?document.getElementById('v2RouteBody'):document.getElementById('v2DayBody');target.innerHTML=html;
   target.querySelectorAll('[data-v2-toggle]').forEach(b=>b.addEventListener('click',()=>toggleDayItem(b.dataset.v2Toggle)));
   target.querySelectorAll('[data-v2-important]').forEach(b=>b.addEventListener('click',()=>toggleImportant(b.dataset.v2Important)));
+  target.querySelectorAll('[data-v2-calendar]').forEach(b=>b.addEventListener('click',()=>openDayItemCalendar(b.dataset.v2Calendar)));
   document.getElementById('v2DayAdd').addEventListener('click',addManualDayItem);
 }
 
@@ -215,6 +217,7 @@ function materializeItem(ds,id){const existing=getPlan(ds,true).items.find(x=>x.
 function toggleDayItem(id){const item=materializeItem(selectedDay,id);if(!item)return;item.status=item.status==='done'?'todo':'done';item.completedAt=item.status==='done'?nowISO():null;if(item.sourceTaskId&&selectedDay===todayStr()){const task=appData.tasks.find(x=>x.id===item.sourceTaskId);if(task?.type==='每日'){task.completedToday=item.status==='done';task.lastCompletedDate=task.completedToday?selectedDay:task.lastCompletedDate}else if(task?.type==='循环'&&item.status==='done')task.lastDoneDate=selectedDay}persist();renderDaySheet();render();}
 function toggleImportant(id){const item=materializeItem(selectedDay,id);if(!item)return;item.important=!item.important;item.reminderMode=item.important?'alarm':'notification';persist();scheduleItem(item,selectedDay);renderDaySheet()}
 function addManualDayItem(){const title=document.getElementById('v2DayNewTitle').value.trim();if(!title){toast('先写下任务内容');return}const important=document.getElementById('v2DayNewImportant').checked;const item={id:'plan-'+genId(),title,type:document.getElementById('v2DayNewType').value,status:'todo',plannedStart:document.getElementById('v2DayNewTime').value,timeLabel:'',important,reminderMode:important?'alarm':'notification',alarmTime:document.getElementById('v2DayNewTime').value,createdAt:nowISO(),completedAt:null};upsertPlanItem(selectedDay,item);persist();scheduleItem(item,selectedDay);renderDaySheet();renderCalendar();toast('已加入当日计划')}
+function openDayItemCalendar(id){const item=materializeItem(selectedDay,id);if(!item){toast('没有找到这项任务');return}openTaskCalendar(item,selectedDay)}
 
 function buildPlanner(){document.getElementById('v2Planner').innerHTML='<div class="v2-page-head"><div><h2>规划室</h2><p>长期习惯保留，任务批次按周更新</p></div></div><div id="v2PlannerContent"></div>'}
 function activeBatch(){return appData.v2.planner.batches.find(x=>x.id===appData.v2.planner.activeBatchId&&x.status==='active')||null}
@@ -274,6 +277,25 @@ async function prepareOCRImage(file){const bitmap=await createImageBitmap(file),
 function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO()}))}else{const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false}))}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
 
 function nativePlugins(){return window.Capacitor?.Plugins||null}
+async function openTaskCalendar(task,dateOverride){
+  const effectiveDate=dateOverride||task?.scheduledDate||selectedDay;
+  const event=window.createCalendarEvent?.(task,effectiveDate);
+  if(!event){toast('这项任务暂时无法加入日历');return false}
+  const plugins=nativePlugins();
+  if(plugins?.TaskCalendar){
+    try{
+      await plugins.TaskCalendar.openInsert({title:event.title,startIso:event.startIso,endIso:event.endIso,description:event.description});
+      toast('已打开手机日历，请确认保存');
+      return true;
+    }catch(e){}
+  }
+  if(task?.sourceTaskId)return downloadFallbackCalendar(task.sourceTaskId,effectiveDate);
+  if(task?.id&&appData.tasks.some(x=>x.id===task.id))return downloadFallbackCalendar(task.id,effectiveDate);
+  const fallbackId='calendar-fallback-'+genId();
+  appData.tasks.push({id:fallbackId,type:task.type||'临时',title:event.title,scheduledDate:effectiveDate,scheduledStart:task.plannedStart||task.scheduledStart||task.alarmTime||'09:00',scheduledEnd:task.plannedEnd||task.scheduledEnd||shiftMinutes(task.plannedStart||task.scheduledStart||task.alarmTime||'09:00',60),timeLabel:task.timeLabel||'',alarmTime:task.alarmTime||'',important:!!task.important});
+  try{return downloadFallbackCalendar(fallbackId,effectiveDate)}finally{appData.tasks=appData.tasks.filter(x=>x.id!==fallbackId)}
+}
+function downloadFallbackCalendar(taskId,dateOverride){downloadICS(taskId,dateOverride);toast('已生成日历文件，可导入手机日历');return true}
 async function initNativeNotifications(){const plugins=nativePlugins(),ln=plugins?.LocalNotifications;if(!ln)return false;try{
   let permission=await ln.checkPermissions();if(permission.display!=='granted')permission=await ln.requestPermissions();if(permission.display!=='granted'){appData.v2.notifications.nativeReady=false;persist();return false}
   await ln.createChannel({id:'regular-task',name:'普通任务提醒',description:'普通任务到点通知',importance:3,visibility:1,vibration:true});

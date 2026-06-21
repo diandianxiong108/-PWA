@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(TaskAlarmPlugin.class);
+        registerPlugin(TaskCalendarPlugin.class);
         super.onCreate(savedInstanceState);
         applySystemBarStyle();
     }
