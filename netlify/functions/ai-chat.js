@@ -93,7 +93,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { messages, existingTasks } = JSON.parse(event.body);
+    const { messages, existingTasks, memoryContext } = JSON.parse(event.body);
 
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
@@ -109,6 +109,8 @@ exports.handler = async (event, context) => {
       role: 'system',
       content: SYSTEM_PROMPT + (existingTasks?.length
         ? `\n\n用户现有任务概览（避免重复创建）：${JSON.stringify(existingTasks.map(t => ({ type: t.type, title: t.title })))}`
+        : '') + (memoryContext
+        ? `\n\n以下是用户明确授权保存的跨对话记忆。把它作为个性化规划约束，不要要求用户重复说明，也不要擅自改变重要闹钟：\n${String(memoryContext).slice(0, 10000)}`
         : ''),
     };
 

@@ -44,11 +44,19 @@ jobs:
         shell: bash
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/taskmanager-release.p12
 
+      - name: Detect signing alias
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          alias_name=$(keytool -list -v -storetype PKCS12 -keystore android/app/taskmanager-release.p12 -storepass "$ANDROID_KEYSTORE_PASSWORD" | sed -n 's/^Alias name: //p' | head -n 1)
+          test -n "$alias_name"
+          echo "ANDROID_KEY_ALIAS=$alias_name" >> "$GITHUB_ENV"
+
       - name: Build signed release APK
         env:
           ANDROID_KEYSTORE_PATH: taskmanager-release.p12
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: taskmanager
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
         run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon

@@ -1309,11 +1309,12 @@ async function sendChat(){
   const ty=document.createElement('div');ty.className='chat-typing';ty.innerHTML='<span></span><span></span><span></span>';ty.id='chatTyping';chatMsgs.appendChild(ty);chatMsgs.scrollTop=chatMsgs.scrollHeight;
   try{
     let summary=localStorage.getItem('task-chat-summary')||'';
+    const memoryContext=window.AIMemorySystem?window.AIMemorySystem.buildPrompt(appData):summary;
     if(chatRound%8===0&&chatRound>0){
-      try{const sr=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[...chatHistory.slice(-10),{role:'user',content:'请总结我的任务习惯'}]})});if(sr.ok){const sd=await sr.json();summary=sd.message||summary;localStorage.setItem('task-chat-summary',summary)}}catch(e){}
+      try{const sr=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:'这是我授权保存的跨对话记忆，请作为规划前提：\n'+memoryContext},...chatHistory.slice(-10),{role:'user',content:'请压缩总结本周对话中的目标、决定、未完成事项，不要重复长期习惯'}],memoryContext})});if(sr.ok){const sd=await sr.json();summary=sd.message||summary;localStorage.setItem('task-chat-summary',summary);window.AIMemorySystem?.weeklySummary.addConversationDigest(summary)}}catch(e){}
       chatHistory=chatHistory.slice(-2);chatRound=0;addBubble('📝 已总结习惯，继续畅聊～','ai');
     }
-    const res=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatHistory.slice(-8),existingTasks:appData.tasks,summary})});
+    const res=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:'这是我授权保存的跨对话记忆，请作为规划前提，不要让我重复说明：\n'+memoryContext},...chatHistory.slice(-8)],existingTasks:appData.tasks,memoryContext})});
     document.getElementById('chatTyping')?.remove();if(!res.ok)throw new Error();
     const data=await res.json(),msg=data.message.replace(/```json[\s\S]*?```/g,'').trim()||data.message;
     addBubble(msg,'ai');chatHistory.push({role:'assistant',content:msg});
@@ -1388,6 +1389,7 @@ function injectStaticIcons(){
 
 // V2 owns boot and persistence. The legacy initData() is deliberately not called.
 </script>
+<script src="ai-memory.js"></script>
 <script src="v2.js"></script>
 <script>loadSprites(()=>{injectStaticIcons();v2Boot()});</script>
 </body>

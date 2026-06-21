@@ -84,6 +84,15 @@ body.v2-ready{padding-bottom:80px}
 .v2-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .v2-calendar-page #calendarSection{display:block!important;margin-top:4px}
 .v2-calendar-page #calDayTasks{display:none!important}
+.ai-memory-popup .box{max-height:82vh!important}
+.ai-memory-block{background:var(--green-bg);border-radius:12px;padding:11px;margin:9px 0;display:grid;gap:7px}
+.ai-memory-block>b{font-size:14px;color:var(--green-d)}
+.ai-memory-block label{font-size:11px;color:var(--text-l);display:grid;gap:4px}
+.ai-memory-block input,.ai-memory-block textarea{width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:#fff;font:inherit;font-size:12px}
+.ai-memory-block p{font-size:12px;line-height:1.5}
+.ai-memory-block details{background:#fff;border-radius:8px;padding:7px;font-size:12px}
+.ai-memory-block pre{white-space:pre-wrap;font-family:inherit;font-size:11px;color:var(--text-l);padding-top:6px}
+.ai-skip-btn{background:#f5f5f5!important;color:#999!important;border-color:#ddd!important}
 body.v2-ready #calendarSection{padding:18px 16px}
 body.v2-ready #calendarSection .cal-day{min-height:52px;border-radius:10px}
 body.v2-ready #calendarSection .cal-day-num{font-size:14px}
