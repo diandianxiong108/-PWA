@@ -1,0 +1,15 @@
+{
+  "appId": "com.personal.taskmanager",
+  "appName": "任务管家 V2",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#f5f9f4"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_task",
+      "iconColor": "#7bc47f"
+    }
+  }
+}

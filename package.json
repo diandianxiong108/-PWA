@@ -1,0 +1,20 @@
+{
+  "name": "task-manager-v2-personal",
+  "version": "2.0.0",
+  "private": true,
+  "description": "任务管家 V2 - 华为 HarmonyOS 4.3 个人安装版",
+  "scripts": {
+    "web:prepare": "node tools/prepare-www.cjs",
+    "cap:add:android": "npm run web:prepare && cap add android",
+    "cap:sync": "npm run web:prepare && cap sync android",
+    "android:build:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.4.1",
+    "@capacitor/core": "8.4.1",
+    "@capacitor/local-notifications": "8.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.4.1"
+  }
+}

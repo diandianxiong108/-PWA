@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>快速添加 - 任务管家</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .container {
+      width: 100%;
+      max-width: 400px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .input-wrap {
+      position: relative;
+    }
+    input {
+      width: 100%;
+      padding: 16px 18px;
+      font-size: 16px;
+      border: 2px solid #e8e8e8;
+      border-radius: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+      background: #f9f9f9;
+    }
+    input:focus {
+      border-color: #333;
+      background: #fff;
+    }
+    input::placeholder {
+      color: #bbb;
+    }
+    .status {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 14px;
+      color: #999;
+      min-height: 20px;
+    }
+    .status.success {
+      color: #34c759;
+    }
+    .status.error {
+      color: #ff3b30;
+    }
+    .hint {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 12px;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>✏️ 快速添加</h1>
+    <div class="input-wrap">
+      <input type="text" id="taskInput" placeholder="输入临时任务，回车保存..." autofocus>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="hint">回车即保存为临时任务 ✨</div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'task-manager-v2-data';
+
+    const input = document.getElementById('taskInput');
+    const status = document.getElementById('status');
+
+    async function saveTask(text) {
+      status.textContent = '保存中...';
+      status.className = 'status';
+
+      try {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        if (!data || !Array.isArray(data.tasks)) throw new Error('请先打开一次任务管家 V2');
+
+        const newTask = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          type: taskType,
+          title: text,
+          icon: '📌',
+          deadline: null,
+          deadlineConfirmed: false,
+          confirmInDays: 3,
+          confirmDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+          hiddenToday: false,
+          priority: 2,
+          duration: null,
+          alarmTime: null,
+        };
+
+        if (taskType === '每日') Object.assign(newTask,{frequency:'每天',subtask:'',completedToday:false,lastCompletedDate:null});
+        if (taskType === '项目') Object.assign(newTask,{steps:[],reminderTime:'22:30',isTiming:false,startTime:null});
+        if (taskType === '循环') Object.assign(newTask,{cycleDays:3,lastDoneDate:null});
+        data.tasks.push(newTask);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+        status.textContent = '✅ 已保存';
+        status.className = 'status success';
+
+        setTimeout(() => {
+          try { window.close(); } catch(e) {}
+        }, 800);
+
+      } catch (err) {
+        status.textContent = '❌ 保存失败: ' + err.message;
+        status.className = 'status error';
+      }
+    }
+
+    // Dynamic hints from URL param
+    const params = new URLSearchParams(window.location.search);
+    const taskType = params.get('type') || '临时';
+    const hints = {
+      '临时': '💡 临时任务建议：有截止日期的单次任务，如"交导师材料"',
+      '每日': '💡 每日任务建议：最小行动，如"打开多邻国学3分钟"',
+      '项目': '💡 项目建议：包含多个步骤，如"确定选题 → 写初稿 → 发布"',
+      '循环': '💡 循环建议：定期重复的事务，如"每3天喂一次猫"'
+    };
+    const hintEl = document.querySelector('.hint');
+    if (hintEl) hintEl.textContent = hints[taskType] || hints['临时'];
+    const placeholders = {
+      '临时': '输入临时任务名称，回车保存...',
+      '每日': '例如：打开多邻国学3分钟...',
+      '项目': '例如：小红书笔记创作项目...',
+      '循环': '例如：每3天给猫铲屎...'
+    };
+    if (input) input.placeholder = placeholders[taskType] || placeholders['临时'];
+    document.title = '快速添加' + taskType + ' - 任务管家';
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const text = input.value.trim();
+        if (!text) return;
+        input.disabled = true;
+        saveTask(text);
+      }
+    });
+  </script>
+</body>
+</html>
