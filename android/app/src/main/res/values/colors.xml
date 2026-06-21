@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 页面背景浅绿色 -->
+    <color name="bgLightGreen">#F5F9F4</color>
+    <!-- 主绿色（主题色） -->
+    <color name="primaryGreen">#7BC47F</color>
+    <!-- 状态栏颜色 = 页面背景色，统一视觉 -->
+    <color name="statusBarColor">#F5F9F4</color>
+    <!-- 深色文字绿 -->
+    <color name="textGreen">#2C3E2D</color>
+</resources>

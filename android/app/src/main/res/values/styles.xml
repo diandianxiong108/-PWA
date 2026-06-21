@@ -13,6 +13,10 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- 状态栏颜色：浅绿色，与页面背景统一 -->
+        <item name="android:statusBarColor">@color/statusBarColor</item>
+        <!-- 浅色背景使用深色图标（时间/电量/网络可见） -->
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
 
