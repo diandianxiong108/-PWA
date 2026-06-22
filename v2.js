@@ -2,6 +2,29 @@
 const STORAGE_KEY='task-manager-v2-data';
 const LEGACY_KEY='appCache';
 const COLOR={每日:'#64b5f6',项目:'#ce93d8',临时:'#ffb74d',循环:'#81c784',记录:'#90a4ae'};
+const HOLIDAYS_2026={
+  '2026-01-01':'元旦',
+  '2026-02-16':'除夕',
+  '2026-02-17':'春节',
+  '2026-02-18':'初二',
+  '2026-02-19':'初三',
+  '2026-02-20':'初四',
+  '2026-02-21':'初五',
+  '2026-02-22':'初六',
+  '2026-04-05':'清明',
+  '2026-05-01':'劳动节',
+  '2026-05-02':'劳动节',
+  '2026-05-03':'劳动节',
+  '2026-06-19':'端午',
+  '2026-09-25':'中秋',
+  '2026-10-01':'国庆',
+  '2026-10-02':'国庆',
+  '2026-10-03':'国庆',
+  '2026-10-04':'国庆',
+  '2026-10-05':'国庆',
+  '2026-10-06':'国庆',
+  '2026-10-07':'国庆'
+};
 const originalFetch=window.fetch.bind(window);
 window.fetch=function(input,init){const native=window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform();if(native&&typeof input==='string'&&input.startsWith('/.netlify/functions/'))input='https://soft-douhua-52d678.netlify.app'+input;return originalFetch(input,init)};
 const SECTION_IDS=['dailySection','projectSection','cyclicSection','tempSection','healthSection','birthdaySection','billSection','extraSection','inspireSection','notesSection','reviewSection','badgeSection','wishSection'];
@@ -23,6 +46,7 @@ function defaultV2(){return{
   schemaVersion:2,
   createdAt:nowISO(),
   dayPlans:{},
+  emotionLogs:[],
   archives:{daySummaries:[],ocrCleanupLog:[]},
   planner:{
     profile:{maxTaskTypes:3,insertLowResistance:true,choresPerDay:1,quietStart:'22:30',quietEnd:'07:30',principles:'一天不超过三种任务类型；精力低时优先低阻力任务；家务少量穿插。'},
@@ -47,6 +71,7 @@ function ensureDataShape(){
   appData.v2.cloud=Object.assign(defaults.cloud,appData.v2.cloud||{});
   appData.v2.archives=Object.assign(defaults.archives,appData.v2.archives||{});
   appData.v2.dayPlans=appData.v2.dayPlans||{};
+  appData.v2.emotionLogs=Array.isArray(appData.v2.emotionLogs)?appData.v2.emotionLogs:[];
   appData.tasks=Array.isArray(appData.tasks)?appData.tasks:[];
   appData.inspirations=Array.isArray(appData.inspirations)?appData.inspirations:[];
   appData.notes=Array.isArray(appData.notes)?appData.notes:[];
@@ -75,6 +100,44 @@ function loadIsolatedData(){
 
 function persist(){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));return true}catch(e){toast('本地保存失败，请导出备份');return false}
+}
+function esc(value){return String(value??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
+function getHolidayLabel(ds){return HOLIDAYS_2026[ds]||''}
+function getBirthdayEntries(ds){const dt=new Date(ds+'T12:00:00'),m=dt.getMonth()+1,d=dt.getDate();return(appData.birthdays||[]).filter(x=>Number(x.month)===m&&Number(x.day)===d)}
+function getEmotionEntries(ds){return(appData.v2?.emotionLogs||[]).filter(x=>x.date===ds)}
+function getDayNotes(ds){return(appData.notes||[]).filter(x=>x.date===ds)}
+function getDayInspirationEntries(ds){return(appData.inspirations||[]).filter(x=>x.date===ds)}
+function getTimeSlotLabel(timeText){
+  if(!timeText)return'未定时';
+  const hour=Number(String(timeText).split(':')[0]||0);
+  if(hour<12)return'上午';
+  if(hour<18)return'下午';
+  return'晚上'
+}
+function intensityFromText(text){
+  if(/崩溃|特别难受|非常难受|压垮|爆炸|受不了/.test(text))return'重';
+  if(/好累|焦虑|烦|难受|委屈|低落|沮丧|压力/.test(text))return'中';
+  return'轻'
+}
+function emotionFromText(text){
+  if(/开心|轻松|高兴|愉快|满足/.test(text))return'开心';
+  if(/委屈/.test(text))return'委屈';
+  if(/烦|烦躁/.test(text))return'烦躁';
+  if(/焦虑|紧张/.test(text))return'焦虑';
+  if(/累|疲惫/.test(text))return'疲惫';
+  if(/难受|低落|沮丧/.test(text))return'低落';
+  return''
+}
+function buildEmotionLog(text,extra={}){
+  const emotion=emotionFromText(text);if(!emotion)return null;
+  return{id:'emo-'+genId(),date:extra.date||todayStr(),event:extra.event||text.slice(0,120),emotion,intensity:extra.intensity||intensityFromText(text),source:extra.source||'ai-chat',rawText:text,createdAt:nowISO()}
+}
+function saveEmotionLog(entry){
+  if(!entry)return false;
+  appData.v2.emotionLogs.unshift(entry);
+  appData.v2.emotionLogs=appData.v2.emotionLogs.slice(0,500);
+  persist();
+  return true
 }
 
 function recurrenceOn(task,ds){
@@ -151,6 +214,7 @@ function displayItems(ds){
 }
 
 function patchLegacyHooks(){
+  const legacyRenderCalendar=renderCalendar;
   saveCache=persist;
   loadCache=()=>!!parseJSON(localStorage.getItem(STORAGE_KEY),null);
   syncFromRemote=async()=>false;
@@ -160,18 +224,40 @@ function patchLegacyHooks(){
   getTasksForDate=function(date){return displayItems(dateKey(date)).map(x=>({id:x.id,color:COLOR[x.type]||COLOR.记录,title:x.title,timeLabel:x.timeLabel,status:x.status,important:x.important}))};
   getWeekTasksForDay=function(ds){return getTasksForDate(new Date(ds+'T12:00:00'))};
   showDayTasks=function(value){const ds=dateKey(value);calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)};
+  renderCalendar=function(){legacyRenderCalendar();decorateCalendarCells()};
   exportData=exportV2;
   importData=importV2;
   const legacySaveBill=saveBill;
   saveBill=function(){const before=new Set(appData.records.entries.map(x=>x.id));legacySaveBill();appData.records.entries.filter(x=>!before.has(x.id)).forEach(linkFinanceEntry);persist();renderFinanceLink()};
 }
+function decorateCalendarCells(){
+  document.querySelectorAll('.cal-day[data-date]').forEach(cell=>{
+    const ds=dateKey(cell.dataset.date),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),moods=getEmotionEntries(ds).length,notes=getDayNotes(ds).length;
+    cell.querySelector('.v2-cal-top')?.remove();
+    cell.querySelector('.v2-cal-bottom')?.remove();
+    const top=document.createElement('div');top.className='v2-cal-top';
+    if(holiday)top.innerHTML+=`<span class="v2-cal-holiday">${esc(holiday)}</span>`;
+    if(birthdays.length)top.innerHTML+=`<span class="v2-cal-bday" title="${birthdays.map(x=>x.name).join('、')}">🎂</span>`;
+    if(top.innerHTML)cell.appendChild(top);
+    if(moods||notes){
+      const bottom=document.createElement('div');bottom.className='v2-cal-bottom';
+      if(moods)bottom.innerHTML+=`<span class="v2-cal-mood" title="有${moods}条情绪记录">💭</span>`;
+      if(notes)bottom.innerHTML+=`<span class="v2-cal-note" title="有${notes}条随笔/笔记">📝</span>`;
+      cell.appendChild(bottom);
+    }
+  })
+}
 function renderCalendarInlinePreview(ds){
   const d=new Date(ds+'T12:00:00'),div=document.getElementById('calDayTasks'),items=displayItems(ds);
   if(!div)return;
-  if(!items.length){div.classList.remove('show');return}
+  const holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),emotions=getEmotionEntries(ds),notes=getDayNotes(ds),mode=appData.v2?.calendarPreviewMode||'compact';
+  if(!items.length&&!birthdays.length&&!holiday&&!emotions.length&&!notes.length){div.classList.remove('show');return}
   div.className='cal-day-tasks show';
-  div.innerHTML=`<div class="v2-cal-preview-head"><span>${d.getMonth()+1}月${d.getDate()}日 · 共 ${items.length} 项</span><button class="v2-secondary" id="v2OpenDayDetail">进入当天详情</button></div>`+items.map(item=>`<div class="task-item"><span class="task-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span>${esc(item.title)}</span><span class="v2-cal-type">${esc(item.type||'任务')}</span></div>`).join('');
+  const previewItems=mode==='all'?items:items.slice(0,4),moreCount=Math.max(0,items.length-previewItems.length);
+  div.innerHTML=`<div class="v2-cal-preview-head"><span>${d.getMonth()+1}月${d.getDate()}日 · 共 ${items.length} 项${holiday?` · ${esc(holiday)}`:''}${birthdays.length?` · 🎂${birthdays.map(x=>x.name).join('、')}`:''}</span><div class="v2-row"><button class="v2-secondary" id="v2PreviewCompact">精简</button><button class="v2-secondary" id="v2PreviewAll">全部</button><button class="v2-secondary" id="v2OpenDayDetail">进入当天详情</button></div></div>`+previewItems.map(item=>`<div class="task-item"><span class="task-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span>${esc(item.title)}</span><span class="v2-cal-type">${esc(item.type||'任务')}</span></div>`).join('')+(moreCount?`<div class="task-item" style="color:var(--text-l)">还有 ${moreCount} 项...</div>`:'')+((emotions.length||notes.length)?`<div class="task-item" style="color:var(--text-l)">💭 情绪 ${emotions.length} 条 · 📝 记录 ${notes.length} 条</div>`:'');
   document.getElementById('v2OpenDayDetail')?.addEventListener('click',()=>openDaySheet(ds));
+  document.getElementById('v2PreviewCompact')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='compact';persist();renderCalendarInlinePreview(ds)});
+  document.getElementById('v2PreviewAll')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='all';persist();renderCalendarInlinePreview(ds)});
 }
 
 function injectShell(){
@@ -216,9 +302,15 @@ function closeDaySheet(){requestCloseRoute()}
 
 function renderDaySheet(){
   const items=displayItems(selectedDay),done=items.filter(x=>x.status==='done').length;const past=selectedDay<todayStr();
+  const emotions=getEmotionEntries(selectedDay),notes=getDayNotes(selectedDay),holiday=getHolidayLabel(selectedDay),birthdays=getBirthdayEntries(selectedDay);
   let html=`<div class="v2-day-summary"><span>${items.length} 项任务</span><span>${done} 项完成</span><span>${past?'历史回顾':selectedDay===todayStr()?'今天':'未来计划'}</span></div>`;
+  if(holiday||birthdays.length)html+=`<div class="v2-panel"><div class="v2-row">${holiday?`<span class="v2-chip active">${esc(holiday)}</span>`:''}${birthdays.length?`<span class="v2-chip">🎂 ${birthdays.map(x=>x.name).join('、')}</span>`:''}</div></div>`;
   if(past&&!getPlan(selectedDay,false))html+='<div class="v2-warning">旧版没有保存这一天的任务快照，因此只能显示当时实际保存下来的记录。V2 启用后的日期会完整保留。</div>';
-  html+=items.length?items.map(item=>`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><div class="v2-row" style="gap:6px;flex:0 0 auto"><button class="v2-secondary" data-v2-calendar="${esc(item.id)}" title="加入手机日历">日历</button><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button></div></div>`).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
+  const sortedItems=[...items].sort((a,b)=>(a.plannedStart||'99:99').localeCompare(b.plannedStart||'99:99'));
+  let currentSlot='';
+  html+=sortedItems.length?sortedItems.map(item=>{const slot=getTimeSlotLabel(item.plannedStart||item.alarmTime||'');const slotHeader=slot!==currentSlot?`<div class="v2-time-slot ${slot}">${slot}</div>`:'';currentSlot=slot;return slotHeader+`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><div class="v2-row" style="gap:6px;flex:0 0 auto"><button class="v2-secondary" data-v2-calendar="${esc(item.id)}" title="加入手机日历">日历</button><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button></div></div>`}).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
+  html+=`<div class="v2-panel"><h3>💭 当天情绪</h3>${emotions.length?emotions.map(x=>`<div class="v2-log-card"><div class="v2-row"><span class="v2-chip">${esc(x.emotion)}</span><span class="v2-chip ${x.intensity==='重'?'active':''}">${esc(x.intensity)}影响</span></div><div class="v2-day-title" style="margin-top:6px">${esc(x.event)}</div></div>`).join(''):'<p class="hint">这一天还没有情绪记录。</p>'}</div>`;
+  html+=`<div class="v2-panel"><h3>📝 当天随笔</h3>${notes.length?notes.map(n=>`<div class="v2-log-card"><div class="v2-day-title">${esc(n.title||'随手记')}</div><div class="v2-day-meta" style="margin-top:4px;white-space:pre-wrap">${esc(n.text||'')}</div></div>`).join(''):'<p class="hint">这一天还没有随笔记录。</p>'}</div>`;
   html+=`<div class="v2-panel"><h3>＋ 安排到这一天</h3><div class="v2-fields"><label>任务内容<input id="v2DayNewTitle" placeholder="要做什么"></label><div class="v2-grid"><label>类型<select id="v2DayNewType"><option>临时</option><option>每日</option><option>项目</option><option>循环</option></select></label><label>时间<input id="v2DayNewTime" type="time"></label></div><label><span><input id="v2DayNewImportant" type="checkbox"> 重要任务（闹钟式提醒）</span></label><button class="v2-primary" id="v2DayAdd">加入当日计划</button></div></div>`;
   const target=routeState?.kind==='day'?document.getElementById('v2RouteBody'):document.getElementById('v2DayBody');target.innerHTML=html;
   target.querySelectorAll('[data-v2-toggle]').forEach(b=>b.addEventListener('click',()=>toggleDayItem(b.dataset.v2Toggle)));
@@ -300,8 +392,8 @@ function refreshPlannerStats(){
 
 function injectRecordsTools(){
   const bill=document.getElementById('billSection');const finance=document.createElement('div');finance.id='v2FinanceLink';finance.className='v2-panel';bill.insertBefore(finance,bill.children[1]||null);
-  const notes=document.getElementById('notesSection');const ocr=document.createElement('div');ocr.id='v2OcrPanel';ocr.className='v2-panel';ocr.innerHTML='<h3>📷 手写内容识别</h3><p class="hint">拍照后先识别为文字，确认修改后再录入，不会直接写入任务。</p><input id="v2OcrFile" type="file" accept="image/*" capture="environment" style="margin-top:8px;font-size:12px"><img id="v2OcrPreview" class="v2-ocr-preview" alt="手写图片预览"><div class="v2-fields"><textarea id="v2OcrText" rows="4" placeholder="识别结果会显示在这里，也可以手动修改"></textarea><div class="v2-row"><button class="v2-secondary" id="v2OcrRun">识别图片</button><select id="v2OcrTarget" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px"><option value="note">存为随手记</option><option value="today">加入今日任务</option><option value="batch">加入当前批次</option></select><button class="v2-primary" id="v2OcrSave">确认录入</button></div></div>';notes.insertBefore(ocr,notes.children[1]||null);
-  document.getElementById('v2OcrFile').addEventListener('change',previewOCR);
+  const notes=document.getElementById('notesSection');const ocr=document.createElement('div');ocr.id='v2OcrPanel';ocr.className='v2-panel';ocr.innerHTML='<h3>📷 拍照识别录入</h3><p class="hint">直接拍照或选图后会自动尝试识别。识别完成后，你可以修改文字，再决定要存到哪里。</p><input id="v2OcrFile" type="file" accept="image/*" capture="environment" style="margin-top:8px;font-size:12px"><img id="v2OcrPreview" class="v2-ocr-preview" alt="手写图片预览"><div class="v2-fields"><textarea id="v2OcrText" rows="5" placeholder="识别结果会显示在这里，也可以手动修改"></textarea><div class="v2-row"><button class="v2-secondary" id="v2OcrRun">重新识别</button><select id="v2OcrTarget" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px"><option value="note">存为随手记</option><option value="today">加入今日任务</option><option value="batch">加入当前批次</option><option value="inspire">存为灵感便签</option><option value="emotion">存为心情记录</option><option value="review">存为复盘素材</option></select><button class="v2-primary" id="v2OcrSave">确认录入</button></div></div>';notes.insertBefore(ocr,notes.children[1]||null);
+  document.getElementById('v2OcrFile').addEventListener('change',async e=>{previewOCR(e);await recognizeOCR()});
   document.getElementById('v2OcrRun').addEventListener('click',recognizeOCR);
   document.getElementById('v2OcrSave').addEventListener('click',saveOCRText);
   renderFinanceLink();
@@ -316,7 +408,28 @@ async function recognizeOCR(){const file=document.getElementById('v2OcrFile').fi
   else{const imageDataUrl=await prepareOCRImage(file);const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});if(!res.ok)throw new Error('OCR_NOT_CONFIGURED');const data=await res.json();document.getElementById('v2OcrText').value=data.text||'';toast('识别完成，请检查文字')}
  }catch(e){toast('当前识别服务尚未配置，可先在文本框中修改录入')}finally{btn.disabled=false;btn.textContent='识别图片'}}
 async function prepareOCRImage(file){const bitmap=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();return canvas.toDataURL('image/jpeg',.88)}
-function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr'})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO(),source:'ocr'}))}else{const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false,source:'ocr'}))}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
+function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr'})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO(),source:'ocr'}))}else if(target==='batch'){const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false,source:'ocr'}))}else if(target==='inspire'){appData.inspirations.unshift({id:genId(),text,date:todayStr(),emotion:'💡',source:'ocr'})}else if(target==='emotion'){saveEmotionLog(buildEmotionLog(text,{source:'ocr'}))}else if(target==='review'){appData.notes.push({id:genId(),title:'复盘素材',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr-review'})}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
+async function aiSaveExtra(){
+  const inp=document.getElementById('extraInput'),text=inp?.value.trim();if(!text){toast('先写下今天额外完成了什么');return}
+  toast('AI 正在整理额外完成...');
+  try{
+    const res=await fetch('/.netlify/functions/ai-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:`请把下面这段今天完成的内容整理成 1~5 条“额外完成事项”，语气保持温和，不需要安慰，只输出任务内容。原文：\n${text}`}],existingTasks:appData.tasks,memoryContext:window.AIMemorySystem?.buildPrompt?.(appData)||''})});
+    if(!res.ok)throw new Error('AI_EXTRA_FAILED');
+    const data=await res.json(),tasks=(data.suggestedTasks||[]).filter(x=>x.title);
+    if(tasks.length){
+      tasks.forEach(t=>upsertPlanItem(todayStr(),{id:'extra-'+genId(),title:t.title,type:t.type||'记录',status:'done',important:false,reminderMode:'notification',createdAt:nowISO(),completedAt:nowISO()}));
+    }else{
+      appData.notes.push({id:genId(),title:'额外完成',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:true});
+    }
+    const emotionLog=buildEmotionLog(text,{source:'extra-ai'});if(emotionLog)saveEmotionLog(emotionLog);
+    persist();render();inp.value='';toast('已整理到今天记录');
+  }catch(e){
+    const emotionLog=buildEmotionLog(text,{source:'extra-ai-fallback'});if(emotionLog)saveEmotionLog(emotionLog);
+    appData.notes.push({id:genId(),title:'额外完成',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:true});
+    persist();render();inp.value='';toast('AI整理暂时失败，已先保存为额外完成');
+  }
+}
+window.aiSaveExtra=aiSaveExtra;
 
 function reviewStatusEl(){return document.getElementById('reviewStatus')}
 function setReviewStatus(text,isError){const el=reviewStatusEl();if(el){el.textContent=text||'';el.style.color=isError?'#d64b4b':'var(--text-l)'}}
@@ -447,6 +560,45 @@ async function restoreCloudBackup(){
 }
 
 function nativePlugins(){return window.Capacitor?.Plugins||null}
+let activeTimeInput=null;
+function ensureTimePicker(){
+  if(document.getElementById('v2TimePicker'))return;
+  const wrap=document.createElement('div');wrap.id='v2TimePicker';wrap.className='v2-overlay';
+  const hourOptions=Array.from({length:24},(_,i)=>`<button class="v2-secondary" data-hour="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</button>`).join('');
+  const minuteOptions=Array.from({length:60},(_,i)=>`<button class="v2-secondary" data-minute="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</button>`).join('');
+  wrap.innerHTML=`<div class="v2-sheet"><div class="v2-sheet-head"><h2>选择时间</h2><button id="v2TimeClose">×</button></div><div class="v2-panel"><h3>常用快捷时间</h3><div class="v2-row" id="v2QuickTimes"><button class="v2-secondary" data-quick="08:00">早上</button><button class="v2-secondary" data-quick="10:00">上午</button><button class="v2-secondary" data-quick="12:00">中午</button><button class="v2-secondary" data-quick="15:00">下午</button><button class="v2-secondary" data-quick="20:00">晚上</button><button class="v2-secondary" data-quick="22:30">睡前</button></div></div><div class="v2-grid"><div class="v2-panel"><h3>小时</h3><div class="v2-fields" style="max-height:240px;overflow:auto" id="v2HourList">${hourOptions}</div></div><div class="v2-panel"><h3>分钟</h3><div class="v2-fields" style="max-height:240px;overflow:auto" id="v2MinuteList">${minuteOptions}</div></div></div><div class="v2-row end"><button class="v2-secondary" id="v2TimeNow">现在</button><button class="v2-primary" id="v2TimeSave">确定</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click',e=>{if(e.target===wrap)closeTimePicker()});
+  document.getElementById('v2TimeClose').addEventListener('click',closeTimePicker);
+  document.getElementById('v2QuickTimes').addEventListener('click',e=>{const btn=e.target.closest('[data-quick]');if(!btn)return;setTimePickerValue(btn.dataset.quick)});
+  document.getElementById('v2HourList').addEventListener('click',e=>{const btn=e.target.closest('[data-hour]');if(!btn)return;const minute=(document.getElementById('v2MinuteList').dataset.selected||'00');setTimePickerValue(`${btn.dataset.hour}:${minute}`)});
+  document.getElementById('v2MinuteList').addEventListener('click',e=>{const btn=e.target.closest('[data-minute]');if(!btn)return;const hour=(document.getElementById('v2HourList').dataset.selected||'09');setTimePickerValue(`${hour}:${btn.dataset.minute}`)});
+  document.getElementById('v2TimeNow').addEventListener('click',()=>{const now=new Date();setTimePickerValue(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)});
+  document.getElementById('v2TimeSave').addEventListener('click',commitTimePicker);
+}
+function setTimePickerValue(value){
+  const[hour='09',minute='00']=String(value||'09:00').split(':');
+  const hourList=document.getElementById('v2HourList'),minuteList=document.getElementById('v2MinuteList');
+  hourList.dataset.selected=hour;minuteList.dataset.selected=minute;
+  hourList.querySelectorAll('[data-hour]').forEach(btn=>btn.classList.toggle('v2-primary',btn.dataset.hour===hour));
+  minuteList.querySelectorAll('[data-minute]').forEach(btn=>btn.classList.toggle('v2-primary',btn.dataset.minute===minute));
+}
+function openTimePickerFor(input){
+  activeTimeInput=input;ensureTimePicker();setTimePickerValue(input.value||'09:00');document.getElementById('v2TimePicker').classList.add('show');
+}
+function closeTimePicker(){document.getElementById('v2TimePicker')?.classList.remove('show');activeTimeInput=null}
+function commitTimePicker(){
+  if(!activeTimeInput)return closeTimePicker();
+  const hour=document.getElementById('v2HourList').dataset.selected||'09',minute=document.getElementById('v2MinuteList').dataset.selected||'00';
+  activeTimeInput.value=`${hour}:${minute}`;
+  activeTimeInput.dispatchEvent(new Event('change',{bubbles:true}));
+  closeTimePicker();
+}
+function installTimePickerHooks(){
+  ensureTimePicker();
+  document.addEventListener('focusin',e=>{const input=e.target.closest('input[type="time"]');if(!input)return;input.blur();openTimePickerFor(input)});
+  document.addEventListener('click',e=>{const input=e.target.closest('input[type="time"]');if(!input)return;e.preventDefault();openTimePickerFor(input)});
+}
 function getTaskReminderDate(task){
   if(!task)return null;
   if(task.scheduledDate)return task.scheduledDate;
@@ -515,7 +667,7 @@ async function importV2(event){const file=event.target.files?.[0];if(!file)retur
 function captureLegacyActions(){document.addEventListener('click',e=>{const btn=e.target.closest('[data-action]');if(!btn)return;const action=btn.dataset.action,id=btn.dataset.id;if(action==='temp-done'){const task=appData.tasks.find(x=>x.id===id);if(task){const item=itemFromTask(task,todayStr());item.status='done';item.completedAt=nowISO();upsertPlanItem(todayStr(),item)}}},true)}
 
 window.v2Boot=function(){
-  patchLegacyHooks();const source=loadIsolatedData();injectShell();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
+  patchLegacyHooks();const source=loadIsolatedData();injectShell();installTimePickerHooks();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
   if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
   autoGeneratePeriodicReviews();

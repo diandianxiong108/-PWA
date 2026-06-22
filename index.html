@@ -338,20 +338,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
   </div>
   <div class="section" id="extraSection" style="margin-top:20px">
     <div class="section-title" style="font-size:14px;color:var(--green-d)"><span>➕ 记录额外完成</span><span class="badge" id="extraCount">0</span></div>
-    <div id="extraForm" class="card" style="padding:12px 14px;display:none">
-      <input type="text" id="extraInput" placeholder="今天额外做了什么..." style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:8px;outline:none;margin-bottom:6px">
+    <div id="extraForm" class="card" style="padding:12px 14px;display:block">
+      <textarea id="extraInput" placeholder="今天额外做了什么？也可以直接用输入法语音转文字说一大段，AI会帮你提取..." style="width:100%;min-height:84px;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:8px;outline:none;margin-bottom:6px;resize:vertical;font-family:inherit"></textarea>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
         <select id="extraType" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:8px;font-size:12px"><option value="每日">每日</option><option value="临时">临时</option><option value="项目">项目</option><option value="随手记">随手记</option></select>
         <input type="number" id="extraDuration" placeholder="耗时(min)" style="width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;outline:none">
         <select id="extraTimeSlot" style="padding:6px;border:1px solid var(--border);border-radius:8px;font-size:12px"><option value="">时段</option><option value="上午">上午</option><option value="下午">下午</option><option value="晚上">晚上</option></select>
         <button onclick="saveExtra()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--green);color:#fff;cursor:pointer;font-size:13px">记录</button>
+        <button onclick="aiSaveExtra()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--green);background:var(--green-l);color:var(--green-d);cursor:pointer;font-size:13px">🤖 AI整理</button>
       </div>
     </div>
     <div id="extraList"></div>
   </div>
   <div class="section inspire-section" id="inspireSection">
     <div class="section-title"><span class="caticon"></span>灵感便签</div>
-    <div class="inspire-input"><input type="text" id="inspireInput" placeholder="记录灵感..." autocomplete="off"><span id="inspireEmotion" style="font-size:18px;cursor:pointer;padding:2px 4px;border-radius:6px;background:var(--green-l)">😊</span></div>
+    <div class="inspire-input"><textarea id="inspireInput" placeholder="记录灵感 / 心情片段..." autocomplete="off" style="flex:1;min-height:52px;padding:10px 14px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:#fff;resize:vertical;font-family:inherit"></textarea><span id="inspireEmotion" style="font-size:18px;cursor:pointer;padding:2px 4px;border-radius:6px;background:var(--green-l)">😊</span></div>
     <div id="inspireEmotions" style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap"></div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><select id="inspireFilter" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px"><option value="all">全部</option><option value="7">最近7天</option><option value="30">最近30天</option><option value="month">本月</option></select><span id="inspireCount" style="font-size:11px;color:var(--text-l)">共 0 条</span></div>
     <div id="inspireList"></div>
@@ -407,7 +408,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
       <button class="chat-close" id="chatClose">✕</button>
     </div>
     <div class="chat-messages" id="chatMessages"><div class="chat-msg ai">你好！告诉我你有哪些任务～</div></div>
-    <div class="chat-input-wrap"><input type="text" id="chatInput" placeholder="说说你的任务..." autocomplete="off"><button class="chat-send-btn" id="chatSend">→</button></div>
+    <div class="chat-input-wrap"><textarea id="chatInput" placeholder="说说今天做了什么、累在哪、想安排什么..." autocomplete="off" style="flex:1;min-height:52px;max-height:140px;padding:10px 14px;font-size:14px;border:1px solid var(--border);border-radius:12px;outline:none;resize:vertical;font-family:inherit"></textarea><button class="chat-send-btn" id="chatSend">→</button></div>
   </div>
 </div>
 
@@ -1105,7 +1106,12 @@ document.addEventListener('click',e=>{if(e.target.id==='expandAllTemp'){document
 document.addEventListener('click',e=>{if(e.target.id==='expandBills'){e.target.remove();document.getElementById('billEntries').style.maxHeight='none'}});
 
 // Inspiration add
-document.getElementById('inspireInput').addEventListener('keydown',e=>{if(e.key==='Enter'){const inp=e.target,t=inp.value.trim();if(!t)return;const emo=document.getElementById('inspireEmotion').textContent;appData.inspirations.push({id:genId(),text:t,emotion:emo,date:todayStr()});const m=t.match(/(\d+)(?:元|块)/);if(m){const amt=parseFloat(m[1]);if(amt>0){appData.records.entries.push({id:genId(),date:todayStr(),type:'expense',category:'其他',amount:amt,note:t,createdAt:new Date().toISOString()})}}inp.value='';renderInspirations();toJSONBin()}});
+document.getElementById('inspireInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){
+    e.preventDefault();
+    const inp=e.target,t=inp.value.trim();if(!t)return;const emo=document.getElementById('inspireEmotion').textContent;appData.inspirations.push({id:genId(),text:t,emotion:emo,date:todayStr()});const m=t.match(/(\d+)(?:元|块)/);if(m){const amt=parseFloat(m[1]);if(amt>0){appData.records.entries.push({id:genId(),date:todayStr(),type:'expense',category:'其他',amount:amt,note:t,createdAt:new Date().toISOString()})}}inp.value='';renderInspirations();toJSONBin()
+  }
+});
 document.getElementById('inspireEmotions').addEventListener('click',e=>{const t=e.target.closest('.iemo');if(!t)return;document.querySelectorAll('.iemo').forEach(x=>x.style.background='var(--border)');t.style.background='var(--green-l)';document.getElementById('inspireEmotion').textContent=t.dataset.emo});
 document.getElementById('inspireFilter').addEventListener('change',()=>renderInspirations());
 
@@ -1325,12 +1331,18 @@ try{const saved=localStorage.getItem('task-chat-history');if(saved){const p=JSON
 chatFab.addEventListener('click',()=>{chatOverlay.classList.add('show');chatInput.focus()});
 chatClose.addEventListener('click',()=>chatOverlay.classList.remove('show'));
 chatOverlay.addEventListener('click',e=>{if(e.target===chatOverlay)chatOverlay.classList.remove('show')});
-chatInput.addEventListener('keydown',e=>{if(e.key==='Enter')sendChat()});
+chatInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){
+    e.preventDefault();
+    sendChat();
+  }
+});
 chatSend.addEventListener('click',sendChat);
 document.getElementById('chatNewBtn').addEventListener('click',()=>{if(!confirm('确定开始新对话？'))return;chatHistory=[];chatRound=0;localStorage.setItem('task-chat-history','[]');localStorage.setItem('task-chat-round','0');chatMsgs.innerHTML='<div class="chat-msg ai">新对话开始啦～</div>'});
 document.getElementById('chatSummaryBtn').addEventListener('click',()=>{document.getElementById('summaryText').textContent=localStorage.getItem('task-chat-summary')||'暂无摘要';document.getElementById('summaryPopup').classList.add('show')});
 async function sendChat(){
   const t=chatInput.value.trim();if(!t)return;chatInput.value='';
+  const localEmotionEntry=window.buildEmotionLog?window.buildEmotionLog(t,{source:'chat-user'}):null;
   addBubble(t,'user');chatHistory.push({role:'user',content:t});chatRound++;
   const ty=document.createElement('div');ty.className='chat-typing';ty.innerHTML='<span></span><span></span><span></span>';ty.id='chatTyping';chatMsgs.appendChild(ty);chatMsgs.scrollTop=chatMsgs.scrollHeight;
   try{
@@ -1344,7 +1356,22 @@ async function sendChat(){
     document.getElementById('chatTyping')?.remove();if(!res.ok)throw new Error();
     const data=await res.json(),msg=data.message.replace(/```json[\s\S]*?```/g,'').trim()||data.message;
     addBubble(msg,'ai');chatHistory.push({role:'assistant',content:msg});
+    if(data.completedItems&&data.completedItems.length){
+      data.completedItems.forEach(item=>{
+        const title=(item.title||item.text||'').trim();
+        if(!title)return;
+        upsertPlanItem(todayStr(),{title,type:item.type||'额外完成',completed:true,source:'ai-extra',time:item.time||''});
+      });
+    }
+    const emotionEntry=data.emotionLog||localEmotionEntry;
+    if(emotionEntry&&emotionEntry.event){
+      window.saveEmotionLog?.({...emotionEntry,source:emotionEntry.source||'chat',date:emotionEntry.date||todayStr(),createdAt:emotionEntry.createdAt||new Date().toISOString()});
+    }
     if(data.suggestedTasks&&data.suggestedTasks.length){const sd=document.createElement('div');sd.className='chat-suggest';sd.innerHTML=data.suggestedTasks.map(t=>`<div class="chat-suggest-item"><div class="chat-suggest-info"><div class="chat-suggest-title">${t.title||''}</div><div class="chat-suggest-meta">${t.type||''}</div></div><button class="chat-add-btn" data-chat-add='${esc(JSON.stringify(t))}'>✅ 添加</button></div>`).join('');chatMsgs.appendChild(sd)}
+    if((data.completedItems&&data.completedItems.length)||emotionEntry){
+      renderCalendarInlinePreview?.(todayStr());
+      if(window.currentDaySheetDate===todayStr())renderDaySheet?.(todayStr());
+    }
     localStorage.setItem('task-chat-history',JSON.stringify(chatHistory.slice(-30)));localStorage.setItem('task-chat-round',String(chatRound));
   }catch(e){document.getElementById('chatTyping')?.remove();addBubble('遇到问题了，稍后再试','ai')}
 }

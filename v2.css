@@ -62,6 +62,11 @@ body.v2-ready{padding-bottom:80px}
 .v2-sheet-head button{width:34px;height:34px;border:0;background:#fff;border-radius:11px;color:var(--text-l)}
 .v2-day-summary{display:flex;gap:8px;margin-bottom:12px}
 .v2-day-summary span{font-size:11px;background:#fff;border-radius:9px;padding:5px 9px;color:var(--text-l)}
+.v2-time-slot{font-size:12px;font-weight:700;color:var(--green-d);margin:12px 2px 6px;padding:6px 10px;border-radius:10px}
+.v2-time-slot.上午{background:#fff8d8;color:#b27b00}
+.v2-time-slot.下午{background:#e8f1ff;color:#2b6cb0}
+.v2-time-slot.晚上{background:#efe9ff;color:#6846c2}
+.v2-time-slot.未定时{background:#edf2ed;color:#6c7d6c}
 .v2-day-item{background:#fff;border-radius:12px;padding:11px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center;border-left:4px solid var(--green)}
 .v2-day-item.done{opacity:.58}
 .v2-day-item.done .v2-day-title{text-decoration:line-through}
@@ -78,6 +83,7 @@ body.v2-ready{padding-bottom:80px}
 .v2-batch small{display:block;color:var(--text-l);margin-top:4px}
 .v2-ocr-preview{max-width:100%;max-height:180px;border-radius:10px;display:none;margin:8px auto;object-fit:contain}
 .v2-warning{font-size:12px;color:#a85a00;background:var(--orange-l);border-radius:9px;padding:8px 10px;margin-bottom:10px}
+.v2-log-card{background:#fff;border-radius:10px;padding:10px;margin-top:8px;border:1px solid var(--border)}
 .v2-import-banner{max-width:448px;margin:8px auto 0;background:#fff8e8;border:1px solid #f2d596;border-radius:12px;padding:10px 12px;font-size:12px;color:#8a5b00;display:flex;gap:8px;align-items:center}
 .v2-import-banner span{flex:1}
 .v2-toast{position:fixed;z-index:400;left:50%;bottom:28px;transform:translateX(-50%) translateY(15px);background:#2c3e2d;color:#fff;border-radius:10px;padding:9px 14px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;max-width:85%;text-align:center}
@@ -100,4 +106,9 @@ body.v2-ready #calendarSection .cal-dot{width:10px;height:10px}
 body.v2-ready #calendarSection .weekday-row{margin-bottom:7px}
 body.v2-ready #calendarSection .v2-cal-preview-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:600;color:var(--green-d)}
 body.v2-ready #calendarSection .v2-cal-type{margin-left:auto;font-size:10px;color:var(--text-l);background:#fff;border-radius:999px;padding:2px 7px}
+body.v2-ready #calendarSection .v2-cal-top{position:absolute;top:2px;left:4px;right:4px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+body.v2-ready #calendarSection .v2-cal-bottom{position:absolute;bottom:2px;right:4px;display:flex;gap:2px;align-items:center;pointer-events:none}
+body.v2-ready #calendarSection .v2-cal-holiday{font-size:9px;color:#e65100;background:rgba(255,243,224,.95);border-radius:6px;padding:0 4px;max-width:32px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.v2-ready #calendarSection .v2-cal-bday,body.v2-ready #calendarSection .v2-cal-note,body.v2-ready #calendarSection .v2-cal-mood{font-size:10px;line-height:1}
+body.v2-ready #calendarSection .cal-day{padding-top:14px;padding-bottom:14px}
 @media (max-width:360px){.v2-grid{grid-template-columns:1fr}.v2-sheet{padding:12px}.v2-launchers{gap:6px}.v2-launcher{min-height:82px;font-size:10px}.v2-launcher-icon{width:44px;height:44px}}
