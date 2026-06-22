@@ -16,10 +16,11 @@
 <title>任务管家 V2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#f5f9f4}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f9f4;color:#2c3e2d;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;padding:env(safe-area-inset-top) 0 80px 0}
 .app{max-width:480px;margin:0 auto;padding:0 16px}
-.loading-overlay{position:fixed;inset:0;z-index:999;background:rgba(245,249,244,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;opacity:0;pointer-events:none;transition:opacity .3s}
-.loading-overlay.show{opacity:1;pointer-events:auto}
+.loading-overlay{position:fixed;inset:0;z-index:999;background:rgba(245,249,244,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s,visibility .3s}
+.loading-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
 .loading-spinner{width:36px;height:36px;border:3px solid #e8efe7;border-top-color:#7bc47f;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -146,8 +147,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
 .smart-help{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--border);font-size:10px;font-weight:600;cursor:help;color:var(--text-l);line-height:1}
 .inspire-section .section-title .caticon{background:#fffde7;border-radius:4px}
 .inspire-input{display:flex;gap:6px;align-items:center;margin-bottom:8px}
-.inspire-input input{flex:1;padding:10px 14px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:#fff}
-.inspire-input input:focus{border-color:var(--green)}
+.inspire-input input,.inspire-input textarea{flex:1;padding:10px 14px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:#fff}
+.inspire-input input:focus,.inspire-input textarea:focus{border-color:var(--green)}
 .inspire-item{display:flex;align-items:flex-start;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
 .inspire-item:last-child{border-bottom:none}
 .inspire-date{font-size:11px;color:#d0dcd0;flex-shrink:0;padding-top:2px;width:70px}
@@ -244,8 +245,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
 .chat-typing span:nth-child(3){animation-delay:.4s}
 @keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 .chat-input-wrap{display:flex;gap:8px;padding:10px 16px 16px;border-top:1px solid var(--border);flex-shrink:0}
-.chat-input-wrap input{flex:1;padding:8px 12px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:var(--green-bg)}
-.chat-input-wrap input:focus{border-color:var(--green);background:#fff}
+.chat-input-wrap input,.chat-input-wrap textarea{flex:1;padding:8px 12px;font-size:14px;border:1px solid var(--border);border-radius:10px;outline:none;background:var(--green-bg)}
+.chat-input-wrap input:focus,.chat-input-wrap textarea:focus{border-color:var(--green);background:#fff}
 .chat-send-btn{width:36px;height:36px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .title[contenteditable="true"]{outline:none;border-bottom:1px dashed var(--border)}
 .summary-popup{position:fixed;inset:0;z-index:250;background:rgba(44,62,45,.4);display:none;align-items:center;justify-content:center;padding:20px}
@@ -727,12 +728,15 @@ function renderCalendarTimeSlot(){
     days.forEach(d=>{
       const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const tasks=getWeekTasksForDay(ds).filter(t=>(t.timeLabel||(t.scheduledStart?computeTimeLabel(t.scheduledStart):'--'))===slot).slice(0,3);
-      let cell=`<div style="min-height:36px;padding:2px;font-size:11px;border-radius:4px;background:${tasks.length?'var(--green-bg)':'transparent'}">`;
+      const allTasks=getWeekTasksForDay(ds).filter(t=>(t.timeLabel||(t.scheduledStart?computeTimeLabel(t.scheduledStart):'--'))===slot);
+      const noteFlag=(appData.notes||[]).some(n=>n.date===ds),emotionFlag=(appData.v2?.emotionLogs||[]).some(n=>n.date===ds),inspireFlag=(appData.inspirations||[]).some(n=>n.date===ds);
+      let cell=`<div onclick="openDaySheet('${ds}')" style="min-height:42px;padding:3px;font-size:11px;border-radius:6px;background:${allTasks.length||noteFlag||emotionFlag||inspireFlag?'var(--green-bg)':'transparent'};cursor:pointer;position:relative">`;
       if(tasks.length){
         cell+=tasks.map(t=>`<div style="display:flex;align-items:center;gap:2px;padding:1px 0;overflow:hidden"><span style="width:6px;height:6px;border-radius:50%;background:${t.color};flex-shrink:0"></span><span style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${t.title}</span></div>`).join('');
-        const more=getWeekTasksForDay(ds).filter(t=>(t.timeLabel||(t.scheduledStart?computeTimeLabel(t.scheduledStart):'--'))===slot).length-3;
+        const more=allTasks.length-3;
         if(more>0)cell+=`<span style="font-size:9px;color:var(--text-l)">+${more}</span>`;
       }
+      if(noteFlag||emotionFlag||inspireFlag)cell+=`<div style="position:absolute;right:3px;bottom:2px;font-size:9px;opacity:.8">${emotionFlag?'💭':''}${noteFlag?'📝':''}${inspireFlag?'💡':''}</div>`;
       cell+=`</div>`;
       h+=cell;
     });
@@ -754,7 +758,7 @@ function renderCalendarYear(){
   for(let m=0;m<12;m++){
     const first=new Date(year,m,1),last=new Date(year,m+1,0);
     const startDay=first.getDay()||7;
-    h+=`<div style="background:#fff;border-radius:10px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:pointer" onclick="calWeekOffset=${calWeekOffset};calIsYear=false;calIsMonth=true;calTimeSlotView=false;var d=new Date();d.setFullYear(${year},${m},1);calWeekOffset=Math.round((d-new Date())/2592000000);renderCalendar();document.getElementById('calToggleView').innerHTML=iconImg('日历',14)+'周视图'"><div style="font-size:11px;font-weight:600;color:var(--text);text-align:center;margin-bottom:4px">${m+1}月</div>`;
+    h+=`<div style="background:#fff;border-radius:10px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:pointer" onclick="calWeekOffset=${calWeekOffset};calIsYear=false;calIsMonth=true;calTimeSlotView=false;var d=new Date();d.setFullYear(${year},${m},1);calWeekOffset=Math.round((d-new Date())/2592000000);renderCalendar()"><div style="font-size:11px;font-weight:600;color:var(--text);text-align:center;margin-bottom:4px">${m+1}月</div>`;
     const weekDays=['一','二','三','四','五','六','日'];
     h+=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:7px;color:#bbb;text-align:center;margin-bottom:2px">${weekDays.map(n=>`<span>${n}</span>`).join('')}</div>`;
     h+=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center">`;
@@ -762,8 +766,9 @@ function renderCalendarYear(){
     for(let day=1;day<=last.getDate();day++){
       const ds=`${year}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
       const tasks=getTasksForDate(new Date(year,m,day));
+      const noteFlag=(appData.notes||[]).some(n=>n.date===ds),emotionFlag=(appData.v2?.emotionLogs||[]).some(n=>n.date===ds),inspireFlag=(appData.inspirations||[]).some(n=>n.date===ds),birthdayFlag=(appData.birthdays||[]).some(n=>Number(n.month)===m+1&&Number(n.day)===day);
       const isT=ds===todayStr2;
-      h+=`<span style="font-size:8px;padding:1px 0;${isT?'color:var(--green);font-weight:700':''};border-radius:2px;position:relative">${day}${tasks.length?`<span style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:${tasks[0].color}"></span>`:''}</span>`;
+      h+=`<span onclick="event.stopPropagation();openDaySheet('${ds}')" style="font-size:8px;padding:1px 0;${isT?'color:var(--green);font-weight:700':''};border-radius:4px;position:relative;cursor:pointer;background:${tasks.length||noteFlag||emotionFlag||inspireFlag||birthdayFlag?'rgba(232,245,233,.55)':'transparent'}">${day}${birthdayFlag?`<span style="position:absolute;top:-1px;right:-1px;font-size:7px">🎂</span>`:''}${tasks.length?`<span style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:${tasks[0].color}"></span>`:''}${(noteFlag||emotionFlag||inspireFlag)?`<span style="position:absolute;bottom:0;right:0;font-size:6px;opacity:.85">${emotionFlag?'•':''}${noteFlag?'•':''}${inspireFlag?'•':''}</span>`:''}</span>`;
     }
     h+=`</div></div>`;
   }
@@ -1117,7 +1122,7 @@ document.getElementById('inspireFilter').addEventListener('change',()=>renderIns
 
 // ====== Notes ======
 function renderNotes(){
-  const c=document.getElementById('notesList');const items=appData.notes||[];
+  const c=document.getElementById('notesList');const items=(appData.notes||[]).filter(n=>!(n.done&&n.date&&n.date<todayStr()));
   if(!items.length){c.innerHTML='<div class="empty-tip">暂无笔记</div>';return}
   const sorted=[...items].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||(b.createdAt||'').localeCompare(a.createdAt||''));
   c.innerHTML=sorted.map(n=>{

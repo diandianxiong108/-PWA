@@ -232,17 +232,18 @@ function patchLegacyHooks(){
 }
 function decorateCalendarCells(){
   document.querySelectorAll('.cal-day[data-date]').forEach(cell=>{
-    const ds=dateKey(cell.dataset.date),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),moods=getEmotionEntries(ds).length,notes=getDayNotes(ds).length;
+    const ds=dateKey(cell.dataset.date),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),moods=getEmotionEntries(ds).length,notes=getDayNotes(ds).length,inspirations=getDayInspirationEntries(ds).length;
     cell.querySelector('.v2-cal-top')?.remove();
     cell.querySelector('.v2-cal-bottom')?.remove();
     const top=document.createElement('div');top.className='v2-cal-top';
     if(holiday)top.innerHTML+=`<span class="v2-cal-holiday">${esc(holiday)}</span>`;
     if(birthdays.length)top.innerHTML+=`<span class="v2-cal-bday" title="${birthdays.map(x=>x.name).join('、')}">🎂</span>`;
     if(top.innerHTML)cell.appendChild(top);
-    if(moods||notes){
+    if(moods||notes||inspirations){
       const bottom=document.createElement('div');bottom.className='v2-cal-bottom';
       if(moods)bottom.innerHTML+=`<span class="v2-cal-mood" title="有${moods}条情绪记录">💭</span>`;
       if(notes)bottom.innerHTML+=`<span class="v2-cal-note" title="有${notes}条随笔/笔记">📝</span>`;
+      if(inspirations)bottom.innerHTML+=`<span class="v2-cal-note" title="有${inspirations}条灵感便签">💡</span>`;
       cell.appendChild(bottom);
     }
   })
@@ -250,11 +251,14 @@ function decorateCalendarCells(){
 function renderCalendarInlinePreview(ds){
   const d=new Date(ds+'T12:00:00'),div=document.getElementById('calDayTasks'),items=displayItems(ds);
   if(!div)return;
-  const holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),emotions=getEmotionEntries(ds),notes=getDayNotes(ds),mode=appData.v2?.calendarPreviewMode||'compact';
-  if(!items.length&&!birthdays.length&&!holiday&&!emotions.length&&!notes.length){div.classList.remove('show');return}
+  const holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),emotions=getEmotionEntries(ds),notes=getDayNotes(ds),inspirations=getDayInspirationEntries(ds),mode=appData.v2?.calendarPreviewMode||'compact';
+  if(!items.length&&!birthdays.length&&!holiday&&!emotions.length&&!notes.length&&!inspirations.length){div.classList.remove('show');return}
   div.className='cal-day-tasks show';
-  const previewItems=mode==='all'?items:items.slice(0,4),moreCount=Math.max(0,items.length-previewItems.length);
-  div.innerHTML=`<div class="v2-cal-preview-head"><span>${d.getMonth()+1}月${d.getDate()}日 · 共 ${items.length} 项${holiday?` · ${esc(holiday)}`:''}${birthdays.length?` · 🎂${birthdays.map(x=>x.name).join('、')}`:''}</span><div class="v2-row"><button class="v2-secondary" id="v2PreviewCompact">精简</button><button class="v2-secondary" id="v2PreviewAll">全部</button><button class="v2-secondary" id="v2OpenDayDetail">进入当天详情</button></div></div>`+previewItems.map(item=>`<div class="task-item"><span class="task-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span>${esc(item.title)}</span><span class="v2-cal-type">${esc(item.type||'任务')}</span></div>`).join('')+(moreCount?`<div class="task-item" style="color:var(--text-l)">还有 ${moreCount} 项...</div>`:'')+((emotions.length||notes.length)?`<div class="task-item" style="color:var(--text-l)">💭 情绪 ${emotions.length} 条 · 📝 记录 ${notes.length} 条</div>`:'');
+  const previewItems=mode==='all'?items:items.slice(0,6),moreCount=Math.max(0,items.length-previewItems.length);
+  const grouped=previewItems.reduce((acc,item)=>{(acc[item.type||'任务']=acc[item.type||'任务']||[]).push(item);return acc},{});
+  const compactHtml=Object.entries(grouped).map(([type,list])=>`<div class="v2-cal-compact-row"><div class="v2-cal-compact-dots">${list.map(item=>`<span class="v2-cal-mini-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span>`).join('')}</div><div class="v2-cal-compact-text">${list.map(item=>esc(item.title)).join('、')}</div></div>`).join('');
+  const detailHtml=previewItems.map(item=>`<div class="task-item"><span class="task-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span>${esc(item.title)}</span><span class="v2-cal-type">${esc(item.type||'任务')}</span></div>`).join('');
+  div.innerHTML=`<div class="v2-cal-preview-head"><span>${d.getMonth()+1}月${d.getDate()}日 · 共 ${items.length} 项${holiday?` · ${esc(holiday)}`:''}${birthdays.length?` · 🎂${birthdays.map(x=>x.name).join('、')}`:''}</span><div class="v2-row"><button class="v2-secondary" id="v2PreviewCompact">精简</button><button class="v2-secondary" id="v2PreviewAll">全部</button><button class="v2-secondary" id="v2OpenDayDetail">进入当天详情</button></div></div>`+(mode==='compact'?compactHtml:detailHtml)+(moreCount?`<div class="task-item" style="color:var(--text-l)">还有 ${moreCount} 项...</div>`:'')+((emotions.length||notes.length||inspirations.length)?`<div class="task-item" style="color:var(--text-l)">💭 情绪 ${emotions.length} 条 · 📝 记录 ${notes.length} 条 · 💡 灵感 ${inspirations.length} 条</div>`:'');
   document.getElementById('v2OpenDayDetail')?.addEventListener('click',()=>openDaySheet(ds));
   document.getElementById('v2PreviewCompact')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='compact';persist();renderCalendarInlinePreview(ds)});
   document.getElementById('v2PreviewAll')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='all';persist();renderCalendarInlinePreview(ds)});
@@ -302,28 +306,54 @@ function closeDaySheet(){requestCloseRoute()}
 
 function renderDaySheet(){
   const items=displayItems(selectedDay),done=items.filter(x=>x.status==='done').length;const past=selectedDay<todayStr();
-  const emotions=getEmotionEntries(selectedDay),notes=getDayNotes(selectedDay),holiday=getHolidayLabel(selectedDay),birthdays=getBirthdayEntries(selectedDay);
+  const emotions=getEmotionEntries(selectedDay),notes=getDayNotes(selectedDay),inspirations=getDayInspirationEntries(selectedDay),holiday=getHolidayLabel(selectedDay),birthdays=getBirthdayEntries(selectedDay);
   let html=`<div class="v2-day-summary"><span>${items.length} 项任务</span><span>${done} 项完成</span><span>${past?'历史回顾':selectedDay===todayStr()?'今天':'未来计划'}</span></div>`;
   if(holiday||birthdays.length)html+=`<div class="v2-panel"><div class="v2-row">${holiday?`<span class="v2-chip active">${esc(holiday)}</span>`:''}${birthdays.length?`<span class="v2-chip">🎂 ${birthdays.map(x=>x.name).join('、')}</span>`:''}</div></div>`;
   if(past&&!getPlan(selectedDay,false))html+='<div class="v2-warning">旧版没有保存这一天的任务快照，因此只能显示当时实际保存下来的记录。V2 启用后的日期会完整保留。</div>';
   const sortedItems=[...items].sort((a,b)=>(a.plannedStart||'99:99').localeCompare(b.plannedStart||'99:99'));
   let currentSlot='';
-  html+=sortedItems.length?sortedItems.map(item=>{const slot=getTimeSlotLabel(item.plannedStart||item.alarmTime||'');const slotHeader=slot!==currentSlot?`<div class="v2-time-slot ${slot}">${slot}</div>`:'';currentSlot=slot;return slotHeader+`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><div class="v2-row" style="gap:6px;flex:0 0 auto"><button class="v2-secondary" data-v2-calendar="${esc(item.id)}" title="加入手机日历">日历</button><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button></div></div>`}).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
-  html+=`<div class="v2-panel"><h3>💭 当天情绪</h3>${emotions.length?emotions.map(x=>`<div class="v2-log-card"><div class="v2-row"><span class="v2-chip">${esc(x.emotion)}</span><span class="v2-chip ${x.intensity==='重'?'active':''}">${esc(x.intensity)}影响</span></div><div class="v2-day-title" style="margin-top:6px">${esc(x.event)}</div></div>`).join(''):'<p class="hint">这一天还没有情绪记录。</p>'}</div>`;
-  html+=`<div class="v2-panel"><h3>📝 当天随笔</h3>${notes.length?notes.map(n=>`<div class="v2-log-card"><div class="v2-day-title">${esc(n.title||'随手记')}</div><div class="v2-day-meta" style="margin-top:4px;white-space:pre-wrap">${esc(n.text||'')}</div></div>`).join(''):'<p class="hint">这一天还没有随笔记录。</p>'}</div>`;
+  html+=sortedItems.length?sortedItems.map(item=>{const slot=getTimeSlotLabel(item.plannedStart||item.alarmTime||'');const slotHeader=slot!==currentSlot?`<div class="v2-time-slot ${slot}">${slot}</div>`:'';currentSlot=slot;return slotHeader+`<div class="v2-day-item ${item.status==='done'?'done':''}" style="border-left-color:${COLOR[item.type]||COLOR.记录}"><button class="v2-day-check" data-v2-toggle="${esc(item.id)}">✓</button><div><div class="v2-day-title">${esc(item.title)}</div><div class="v2-day-meta">${esc(item.type||'任务')}${item.timeLabel?' · '+esc(item.timeLabel):''}${item.plannedStart?' · '+esc(item.plannedStart):''}${item.reminderMode==='alarm'?' · 闹钟':' · 通知'}</div></div><div class="v2-row" style="gap:6px;flex:0 0 auto"><button class="v2-secondary" data-v2-calendar="${esc(item.id)}" title="加入手机日历">日历</button><button class="v2-important" data-v2-important="${esc(item.id)}" title="切换重要提醒">${item.important?'★':'☆'}</button><button class="v2-danger" data-v2-delete="${esc(item.id)}" title="删除这项">删</button></div></div>`}).join(''):'<div class="v2-empty">这一天还没有安排<br>可以在下面添加一项</div>';
+  html+=`<div class="v2-panel"><h3>💭 当天情绪</h3>${emotions.length?emotions.map(x=>`<div class="v2-log-card"><div class="v2-row"><span class="v2-chip">${esc(x.emotion)}</span><span class="v2-chip ${x.intensity==='重'?'active':''}">${esc(x.intensity)}影响</span><button class="v2-danger" data-v2-del-emotion="${esc(x.id)}" style="margin-left:auto">删</button></div><div class="v2-day-title" style="margin-top:6px">${esc(x.event)}</div>${x.note?`<div class="v2-day-meta" style="margin-top:4px;white-space:pre-wrap">${esc(x.note)}</div>`:''}</div>`).join(''):'<p class="hint">这一天还没有情绪记录。</p>'}<div class="v2-fields" style="margin-top:10px"><textarea id="v2DayEmotionText" rows="3" placeholder="比如：今天开会很累，心里有点烦，压力中等"></textarea><button class="v2-primary" id="v2DayEmotionAdd">保存这条心情</button></div></div>`;
+  html+=`<div class="v2-panel"><h3>📝 当天随笔</h3>${notes.length?notes.map(n=>`<div class="v2-log-card"><div class="v2-row"><div class="v2-day-title">${esc(n.title||'随手记')}</div><button class="v2-danger" data-v2-del-note="${esc(n.id)}" style="margin-left:auto">删</button></div><div class="v2-day-meta" style="margin-top:4px;white-space:pre-wrap">${esc(n.text||'')}</div></div>`).join(''):'<p class="hint">这一天还没有随笔记录。</p>'}<div class="v2-fields" style="margin-top:10px"><input id="v2DayNoteTitle" placeholder="标题（选填）"><textarea id="v2DayNoteText" rows="3" placeholder="记下这一天的想法、备忘或复盘碎片"></textarea><button class="v2-primary" id="v2DayNoteAdd">保存到这一天</button></div></div>`;
+  html+=`<div class="v2-panel"><h3>💡 当天灵感</h3>${inspirations.length?inspirations.map(n=>`<div class="v2-log-card"><div class="v2-row"><span class="v2-chip">${esc(n.emotion||'💡')}</span><span class="v2-day-meta">${esc(n.date||selectedDay)}</span><button class="v2-danger" data-v2-del-inspire="${esc(n.id)}" style="margin-left:auto">删</button></div><div class="v2-day-meta" style="margin-top:6px;white-space:pre-wrap">${esc(n.text||'')}</div></div>`).join(''):'<p class="hint">这一天还没有灵感便签。</p>'}<div class="v2-fields" style="margin-top:10px"><textarea id="v2DayInspireText" rows="3" placeholder="记下今天闪过的灵感、提醒或一句话"></textarea><button class="v2-primary" id="v2DayInspireAdd">保存这条灵感</button></div></div>`;
   html+=`<div class="v2-panel"><h3>＋ 安排到这一天</h3><div class="v2-fields"><label>任务内容<input id="v2DayNewTitle" placeholder="要做什么"></label><div class="v2-grid"><label>类型<select id="v2DayNewType"><option>临时</option><option>每日</option><option>项目</option><option>循环</option></select></label><label>时间<input id="v2DayNewTime" type="time"></label></div><label><span><input id="v2DayNewImportant" type="checkbox"> 重要任务（闹钟式提醒）</span></label><button class="v2-primary" id="v2DayAdd">加入当日计划</button></div></div>`;
   const target=routeState?.kind==='day'?document.getElementById('v2RouteBody'):document.getElementById('v2DayBody');target.innerHTML=html;
   target.querySelectorAll('[data-v2-toggle]').forEach(b=>b.addEventListener('click',()=>toggleDayItem(b.dataset.v2Toggle)));
   target.querySelectorAll('[data-v2-important]').forEach(b=>b.addEventListener('click',()=>toggleImportant(b.dataset.v2Important)));
   target.querySelectorAll('[data-v2-calendar]').forEach(b=>b.addEventListener('click',()=>openDayItemCalendar(b.dataset.v2Calendar)));
+  target.querySelectorAll('[data-v2-delete]').forEach(b=>b.addEventListener('click',()=>deleteDayItem(b.dataset.v2Delete)));
+  target.querySelectorAll('[data-v2-del-emotion]').forEach(b=>b.addEventListener('click',()=>deleteDayEmotion(b.dataset.v2DelEmotion)));
+  target.querySelectorAll('[data-v2-del-note]').forEach(b=>b.addEventListener('click',()=>deleteDayNote(b.dataset.v2DelNote)));
+  target.querySelectorAll('[data-v2-del-inspire]').forEach(b=>b.addEventListener('click',()=>deleteDayInspiration(b.dataset.v2DelInspire)));
   document.getElementById('v2DayAdd').addEventListener('click',addManualDayItem);
+  document.getElementById('v2DayEmotionAdd').addEventListener('click',addDayEmotion);
+  document.getElementById('v2DayNoteAdd').addEventListener('click',addDayNote);
+  document.getElementById('v2DayInspireAdd').addEventListener('click',addDayInspiration);
 }
 
 function findDisplayedItem(ds,id){return displayItems(ds).find(x=>x.id===id)}
 function materializeItem(ds,id){const existing=getPlan(ds,true).items.find(x=>x.id===id);if(existing)return existing;const predicted=findDisplayedItem(ds,id);return predicted?upsertPlanItem(ds,predicted):null}
 function toggleDayItem(id){const item=materializeItem(selectedDay,id);if(!item)return;item.status=item.status==='done'?'todo':'done';item.completedAt=item.status==='done'?nowISO():null;if(item.sourceTaskId&&selectedDay===todayStr()){const task=appData.tasks.find(x=>x.id===item.sourceTaskId);if(task?.type==='每日'){task.completedToday=item.status==='done';task.lastCompletedDate=task.completedToday?selectedDay:task.lastCompletedDate}else if(task?.type==='循环'&&item.status==='done')task.lastDoneDate=selectedDay}persist();renderDaySheet();render();}
 function toggleImportant(id){const item=materializeItem(selectedDay,id);if(!item)return;item.important=!item.important;item.reminderMode=item.important?'alarm':'notification';persist();scheduleItem(item,selectedDay);renderDaySheet()}
-function addManualDayItem(){const title=document.getElementById('v2DayNewTitle').value.trim();if(!title){toast('先写下任务内容');return}const important=document.getElementById('v2DayNewImportant').checked;const item={id:'plan-'+genId(),title,type:document.getElementById('v2DayNewType').value,status:'todo',plannedStart:document.getElementById('v2DayNewTime').value,timeLabel:'',important,reminderMode:important?'alarm':'notification',alarmTime:document.getElementById('v2DayNewTime').value,createdAt:nowISO(),completedAt:null};upsertPlanItem(selectedDay,item);persist();scheduleItem(item,selectedDay);renderDaySheet();renderCalendar();toast('已加入当日计划')}
+function deleteDayItem(id){
+  const plan=getPlan(selectedDay,true),item=materializeItem(selectedDay,id);if(!item)return;
+  if(item.sourceTaskId&&selectedDay===todayStr()){
+    if(!confirm('这是系统任务，删除后会从任务列表里一起移除。继续吗？'))return;
+    appData.tasks=appData.tasks.filter(x=>x.id!==item.sourceTaskId);
+    plan.items=plan.items.filter(x=>x.sourceTaskId!==item.sourceTaskId&&x.id!==id);
+  }else{
+    if(!confirm('删除这一天里的这项安排？'))return;
+    plan.items=plan.items.filter(x=>x.id!==id);
+  }
+  persist();renderDaySheet();renderCalendar();render();toast('已删除');
+}
+function addManualDayItem(){const title=document.getElementById('v2DayNewTitle').value.trim();if(!title){toast('先写下任务内容');return}const important=document.getElementById('v2DayNewImportant').checked;const item={id:'plan-'+genId(),title,type:document.getElementById('v2DayNewType').value,status:'todo',plannedStart:document.getElementById('v2DayNewTime').value,timeLabel:getTimeSlotLabel(document.getElementById('v2DayNewTime').value),important,reminderMode:important?'alarm':'notification',alarmTime:document.getElementById('v2DayNewTime').value,createdAt:nowISO(),completedAt:null};upsertPlanItem(selectedDay,item);persist();scheduleItem(item,selectedDay);renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);toast('已加入当日计划')}
+function addDayEmotion(){const text=document.getElementById('v2DayEmotionText').value.trim();if(!text){toast('先写一点今天的心情');return}const entry=buildEmotionLog(text,{date:selectedDay,source:'day-sheet'});if(!entry){toast('这一段里还没识别到明显情绪，你也可以再写具体一点');return}entry.note=text.slice(0,160);saveEmotionLog(entry);document.getElementById('v2DayEmotionText').value='';renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);toast('已保存心情记录')}
+function addDayNote(){const text=document.getElementById('v2DayNoteText').value.trim();if(!text){toast('先写一点内容');return}appData.notes.unshift({id:genId(),title:document.getElementById('v2DayNoteTitle').value.trim(),text,date:selectedDay,createdAt:nowISO(),pinned:false,done:false,source:'day-sheet'});persist();document.getElementById('v2DayNoteTitle').value='';document.getElementById('v2DayNoteText').value='';renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);toast('已保存到这一天')}
+function addDayInspiration(){const text=document.getElementById('v2DayInspireText').value.trim();if(!text){toast('先写一点灵感');return}const emo=emotionFromText(text)||'💡';appData.inspirations.unshift({id:genId(),text,date:selectedDay,emotion:emo,source:'day-sheet'});persist();document.getElementById('v2DayInspireText').value='';renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);toast('已保存这条灵感')}
+function deleteDayEmotion(id){if(!confirm('删除这条心情记录？'))return;appData.v2.emotionLogs=(appData.v2.emotionLogs||[]).filter(x=>x.id!==id);persist();renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);toast('已删除心情记录')}
+function deleteDayNote(id){if(!confirm('删除这条随笔？'))return;appData.notes=(appData.notes||[]).filter(x=>x.id!==id);persist();renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);renderNotes?.();toast('已删除随笔')}
+function deleteDayInspiration(id){if(!confirm('删除这条灵感？'))return;appData.inspirations=(appData.inspirations||[]).filter(x=>x.id!==id);persist();renderDaySheet();renderCalendar();renderCalendarInlinePreview(selectedDay);renderInspirations?.();toast('已删除灵感')}
 function openDayItemCalendar(id){const item=materializeItem(selectedDay,id);if(!item){toast('没有找到这项任务');return}openTaskCalendar(item,selectedDay)}
 function buildSectionQuickAdd(sectionId){
   const section=document.getElementById(sectionId);if(!section||section.querySelector('.v2-inline-add'))return;
@@ -392,10 +422,11 @@ function refreshPlannerStats(){
 
 function injectRecordsTools(){
   const bill=document.getElementById('billSection');const finance=document.createElement('div');finance.id='v2FinanceLink';finance.className='v2-panel';bill.insertBefore(finance,bill.children[1]||null);
-  const notes=document.getElementById('notesSection');const ocr=document.createElement('div');ocr.id='v2OcrPanel';ocr.className='v2-panel';ocr.innerHTML='<h3>📷 拍照识别录入</h3><p class="hint">直接拍照或选图后会自动尝试识别。识别完成后，你可以修改文字，再决定要存到哪里。</p><input id="v2OcrFile" type="file" accept="image/*" capture="environment" style="margin-top:8px;font-size:12px"><img id="v2OcrPreview" class="v2-ocr-preview" alt="手写图片预览"><div class="v2-fields"><textarea id="v2OcrText" rows="5" placeholder="识别结果会显示在这里，也可以手动修改"></textarea><div class="v2-row"><button class="v2-secondary" id="v2OcrRun">重新识别</button><select id="v2OcrTarget" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px"><option value="note">存为随手记</option><option value="today">加入今日任务</option><option value="batch">加入当前批次</option><option value="inspire">存为灵感便签</option><option value="emotion">存为心情记录</option><option value="review">存为复盘素材</option></select><button class="v2-primary" id="v2OcrSave">确认录入</button></div></div>';notes.insertBefore(ocr,notes.children[1]||null);
+  const notes=document.getElementById('notesSection');const ocr=document.createElement('div');ocr.id='v2OcrPanel';ocr.className='v2-panel';ocr.innerHTML='<h3>📷 拍照识别录入</h3><p class="hint">直接拍照或选图后会自动尝试识别。识别完成后，你可以修改文字，再决定要存到哪里。</p><div id="v2OcrStatus" class="hint v2-ocr-status">正在检查识别方式…</div><input id="v2OcrFile" type="file" accept="image/*" capture="environment" style="margin-top:8px;font-size:12px"><img id="v2OcrPreview" class="v2-ocr-preview" alt="手写图片预览"><div class="v2-fields"><textarea id="v2OcrText" rows="5" placeholder="识别结果会显示在这里，也可以手动修改"></textarea><div class="v2-row"><button class="v2-secondary" id="v2OcrRun">重新识别</button><select id="v2OcrTarget" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px"><option value="note">存为随手记</option><option value="today">加入今日任务</option><option value="batch">加入当前批次</option><option value="inspire">存为灵感便签</option><option value="emotion">存为心情记录</option><option value="review">存为复盘素材</option></select><button class="v2-primary" id="v2OcrSave">确认录入</button></div></div>';notes.insertBefore(ocr,notes.children[1]||null);
   document.getElementById('v2OcrFile').addEventListener('change',async e=>{previewOCR(e);await recognizeOCR()});
   document.getElementById('v2OcrRun').addEventListener('click',recognizeOCR);
   document.getElementById('v2OcrSave').addEventListener('click',saveOCRText);
+  refreshOCRStatus();
   renderFinanceLink();
 }
 
@@ -403,10 +434,24 @@ function renderFinanceLink(){const box=document.getElementById('v2FinanceLink');
 function linkFinanceEntry(entry){const link=appData.v2.financeLink;if(!entry||entry.type!=='income'||entry.category!==link.category||link.linkedEntryIds.includes(entry.id))return;const wish=appData.wishes.find(w=>w.id===link.wishId)||appData.wishes.find(w=>/保研.*主包|主包/.test(w.title));if(!wish){if(!link.pendingEntryIds.includes(entry.id))link.pendingEntryIds.push(entry.id);return}wish.currentAmount=(Number(wish.currentAmount)||0)+Number(entry.amount||0);link.linkedEntryIds.push(entry.id);link.pendingEntryIds=link.pendingEntryIds.filter(x=>x!==entry.id);toast(`已自动计入「${wish.title}」`)}
 
 function previewOCR(e){const file=e.target.files?.[0];if(!file)return;const img=document.getElementById('v2OcrPreview');img.src=URL.createObjectURL(file);img.style.display='block'}
+function setOCRStatus(text,mode='neutral'){const el=document.getElementById('v2OcrStatus');if(!el)return;el.textContent=text;el.dataset.mode=mode}
+function refreshOCRStatus(){
+  const native=window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform();
+  if('TextDetector'in window){setOCRStatus('当前可用：本机识别优先。拍照后会先尝试直接在手机上识别。','ok');return}
+  if(native){setOCRStatus('当前会优先走云端识别。你可以直接在这里拍照或选图，不需要退出软件。若网络不稳，也能先手动改字再保存。','neutral');return}
+  setOCRStatus('当前将使用云端 OCR。若网络或服务暂时不可用，也可以先手动修改下方文字再保存。','neutral');
+}
 async function recognizeOCR(){const file=document.getElementById('v2OcrFile').files?.[0];if(!file){toast('请先拍照或选择图片');return}const btn=document.getElementById('v2OcrRun');btn.disabled=true;btn.textContent='识别中…';try{
-  if('TextDetector'in window){const bitmap=await createImageBitmap(file),detector=new TextDetector(),lines=await detector.detect(bitmap);document.getElementById('v2OcrText').value=lines.map(x=>x.rawValue).join('\n');toast('已完成本机识别，请检查文字')}
-  else{const imageDataUrl=await prepareOCRImage(file);const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});if(!res.ok)throw new Error('OCR_NOT_CONFIGURED');const data=await res.json();document.getElementById('v2OcrText').value=data.text||'';toast('识别完成，请检查文字')}
- }catch(e){toast('当前识别服务尚未配置，可先在文本框中修改录入')}finally{btn.disabled=false;btn.textContent='识别图片'}}
+  if('TextDetector'in window){
+    const bitmap=await createImageBitmap(file),detector=new TextDetector(),lines=await detector.detect(bitmap),text=lines.map(x=>x.rawValue).join('\n').trim();
+    if(text){document.getElementById('v2OcrText').value=text;setOCRStatus('本机识别完成，你可以直接改字后保存。','ok');toast('已完成本机识别，请检查文字')}
+    else{
+      const imageDataUrl=await prepareOCRImage(file);const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.message||data.error||'OCR_NOT_CONFIGURED');document.getElementById('v2OcrText').value=data.text||'';setOCRStatus('本机识别结果太少，已自动改用云端识别。','ok');toast('已切换云端识别，请检查文字')
+    }
+  }else{
+    const imageDataUrl=await prepareOCRImage(file);const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.message||data.error||'OCR_NOT_CONFIGURED');document.getElementById('v2OcrText').value=data.text||'';setOCRStatus('云端识别完成，你可以直接改字后保存。','ok');toast('识别完成，请检查文字')
+  }
+ }catch(e){setOCRStatus('当前识别没有成功：这版支持先保留图片预览，再手动修改文字并直接保存到任务/笔记/心情。','warn');toast('这次识别没成功，但你仍然可以手动改字后直接录入')}finally{btn.disabled=false;btn.textContent='重新识别'}}
 async function prepareOCRImage(file){const bitmap=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();return canvas.toDataURL('image/jpeg',.88)}
 function saveOCRText(){const text=document.getElementById('v2OcrText').value.trim();if(!text){toast('没有可录入的文字');return}const target=document.getElementById('v2OcrTarget').value;if(target==='note'){appData.notes.push({id:genId(),title:'手写识别',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr'})}else if(target==='today'){text.split(/\r?\n/).filter(Boolean).forEach(line=>upsertPlanItem(todayStr(),{id:'ocr-'+genId(),title:line.trim(),type:'临时',status:'todo',important:false,reminderMode:'notification',createdAt:nowISO(),source:'ocr'}))}else if(target==='batch'){const batch=activeBatch();if(!batch){toast('请先在规划室开启任务批次');return}text.split(/\r?\n/).filter(Boolean).forEach(line=>batch.items.push({id:genId(),title:line.trim(),done:false,source:'ocr'}))}else if(target==='inspire'){appData.inspirations.unshift({id:genId(),text,date:todayStr(),emotion:'💡',source:'ocr'})}else if(target==='emotion'){saveEmotionLog(buildEmotionLog(text,{source:'ocr'}))}else if(target==='review'){appData.notes.push({id:genId(),title:'复盘素材',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'ocr-review'})}persist();render();document.getElementById('v2OcrText').value='';toast('已确认录入')}
 async function aiSaveExtra(){
@@ -566,7 +611,7 @@ function ensureTimePicker(){
   const wrap=document.createElement('div');wrap.id='v2TimePicker';wrap.className='v2-overlay';
   const hourOptions=Array.from({length:24},(_,i)=>`<button class="v2-secondary" data-hour="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</button>`).join('');
   const minuteOptions=Array.from({length:60},(_,i)=>`<button class="v2-secondary" data-minute="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</button>`).join('');
-  wrap.innerHTML=`<div class="v2-sheet"><div class="v2-sheet-head"><h2>选择时间</h2><button id="v2TimeClose">×</button></div><div class="v2-panel"><h3>常用快捷时间</h3><div class="v2-row" id="v2QuickTimes"><button class="v2-secondary" data-quick="08:00">早上</button><button class="v2-secondary" data-quick="10:00">上午</button><button class="v2-secondary" data-quick="12:00">中午</button><button class="v2-secondary" data-quick="15:00">下午</button><button class="v2-secondary" data-quick="20:00">晚上</button><button class="v2-secondary" data-quick="22:30">睡前</button></div></div><div class="v2-grid"><div class="v2-panel"><h3>小时</h3><div class="v2-fields" style="max-height:240px;overflow:auto" id="v2HourList">${hourOptions}</div></div><div class="v2-panel"><h3>分钟</h3><div class="v2-fields" style="max-height:240px;overflow:auto" id="v2MinuteList">${minuteOptions}</div></div></div><div class="v2-row end"><button class="v2-secondary" id="v2TimeNow">现在</button><button class="v2-primary" id="v2TimeSave">确定</button></div></div>`;
+  wrap.innerHTML=`<div class="v2-sheet"><div class="v2-sheet-head"><h2>选择时间</h2><button id="v2TimeClose">×</button></div><div class="v2-panel"><h3>常用快捷时间</h3><div class="v2-quick-time-row" id="v2QuickTimes"><button class="v2-secondary" data-quick="08:00">早上</button><button class="v2-secondary" data-quick="10:00">上午</button><button class="v2-secondary" data-quick="12:00">中午</button><button class="v2-secondary" data-quick="15:00">下午</button><button class="v2-secondary" data-quick="20:00">晚上</button><button class="v2-secondary" data-quick="22:30">睡前</button></div></div><div class="v2-grid"><div class="v2-panel"><h3>小时</h3><div class="v2-time-wheel" id="v2HourList">${hourOptions}</div></div><div class="v2-panel"><h3>分钟</h3><div class="v2-time-wheel" id="v2MinuteList">${minuteOptions}</div></div></div><div class="v2-row end"><button class="v2-secondary" id="v2TimeNow">现在</button><button class="v2-primary" id="v2TimeSave">确定</button></div></div>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)closeTimePicker()});
   document.getElementById('v2TimeClose').addEventListener('click',closeTimePicker);
@@ -575,6 +620,8 @@ function ensureTimePicker(){
   document.getElementById('v2MinuteList').addEventListener('click',e=>{const btn=e.target.closest('[data-minute]');if(!btn)return;const hour=(document.getElementById('v2HourList').dataset.selected||'09');setTimePickerValue(`${hour}:${btn.dataset.minute}`)});
   document.getElementById('v2TimeNow').addEventListener('click',()=>{const now=new Date();setTimePickerValue(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`)});
   document.getElementById('v2TimeSave').addEventListener('click',commitTimePicker);
+  bindTimeWheelScroll('v2HourList','hour');
+  bindTimeWheelScroll('v2MinuteList','minute');
 }
 function setTimePickerValue(value){
   const[hour='09',minute='00']=String(value||'09:00').split(':');
@@ -582,6 +629,45 @@ function setTimePickerValue(value){
   hourList.dataset.selected=hour;minuteList.dataset.selected=minute;
   hourList.querySelectorAll('[data-hour]').forEach(btn=>btn.classList.toggle('v2-primary',btn.dataset.hour===hour));
   minuteList.querySelectorAll('[data-minute]').forEach(btn=>btn.classList.toggle('v2-primary',btn.dataset.minute===minute));
+  centerWheelButton(hourList,`[data-hour="${hour}"]`);
+  centerWheelButton(minuteList,`[data-minute="${minute}"]`);
+}
+function bindTimeWheelScroll(id,kind){
+  const list=document.getElementById(id);if(!list)return;
+  let timer=null;
+  list.addEventListener('scroll',()=>{
+    clearTimeout(timer);
+    timer=setTimeout(()=>{
+      const selected=centerWheelNearest(list,kind);
+      if(!selected)return;
+      if(kind==='hour'){
+        const minute=document.getElementById('v2MinuteList')?.dataset.selected||'00';
+        setTimePickerValue(`${selected}:${minute}`);
+      }else{
+        const hour=document.getElementById('v2HourList')?.dataset.selected||'09';
+        setTimePickerValue(`${hour}:${selected}`);
+      }
+    },90);
+  },{passive:true});
+}
+function centerWheelNearest(list,kind){
+  const attr=kind==='hour'?'data-hour':'data-minute';
+  const buttons=[...list.querySelectorAll(`[${attr}]`)];if(!buttons.length)return'';
+  const mid=list.scrollTop+list.clientHeight/2;
+  let best=null,bestDelta=Infinity;
+  buttons.forEach(btn=>{
+    const center=btn.offsetTop+btn.offsetHeight/2;
+    const delta=Math.abs(center-mid);
+    if(delta<bestDelta){bestDelta=delta;best=btn}
+  });
+  if(!best)return'';
+  centerWheelButton(list,`[${attr}="${best.getAttribute(attr)}"]`);
+  return best.getAttribute(attr)||'';
+}
+function centerWheelButton(list,selector){
+  const btn=list?.querySelector(selector);if(!btn)return;
+  const target=btn.offsetTop-(list.clientHeight-btn.offsetHeight)/2;
+  if(Math.abs(list.scrollTop-target)>3)list.scrollTop=target;
 }
 function openTimePickerFor(input){
   activeTimeInput=input;ensureTimePicker();setTimePickerValue(input.value||'09:00');document.getElementById('v2TimePicker').classList.add('show');
@@ -658,8 +744,40 @@ async function scheduleItem(item,ds){if(!item.alarmTime&&!item.plannedStart)retu
 function schedulePendingReminders(){
   Object.entries(appData.v2.dayPlans).forEach(([ds,p])=>(p.items||[]).filter(x=>x.status!=='done').forEach(x=>scheduleItem(x,ds)));
   appData.tasks.forEach(task=>syncTaskReminder(task));
+  scheduleBirthdayReminders();
+}
+function nextBirthdayReminderDate(birthday){
+  const now=new Date(),baseYear=now.getFullYear();
+  for(let offset=0;offset<=1;offset++){
+    const target=new Date(baseYear+offset,Number(birthday.month)-1,Number(birthday.day),9,0,0,0);
+    target.setDate(target.getDate()-Number(birthday.remindDays||0));
+    if(target>now)return target;
+  }
+  return null;
+}
+async function scheduleBirthdayReminders(){
+  const plugins=nativePlugins();if(!plugins?.LocalNotifications)return;
+  const notifications=(appData.birthdays||[]).map(b=>{
+    const at=nextBirthdayReminderDate(b);if(!at)return null;
+    return{id:hashId(`birthday-${b.id}-${dateKey(at)}`),title:'生日提醒',body:Number(b.remindDays||0)>0?`${b.name} 还有 ${b.remindDays} 天过生日 🎂`:`今天是 ${b.name} 的生日 🎂`,schedule:{at,allowWhileIdle:true},channelId:'regular-task',extra:{birthdayId:b.id,date:dateKey(at)}}}).filter(Boolean);
+  if(!notifications.length)return;
+  try{await plugins.LocalNotifications.schedule({notifications});}catch(e){}
 }
 function scheduleAIMemorySuggestion(){const ai=window.AIMemorySystem,suggestion=ai?.nextSuggestion(appData);if(!suggestion||!appData.v2.notifications.nativeReady)return;const key='tm_ai_last_proactive_push',today=todayStr();if(localStorage.getItem(key)===today)return;let date=today,time=suggestion.time||'09:00',at=new Date(`${date}T${time}:00`);if(at<=new Date()){at=new Date(Date.now()+60000);date=dateKey(at);time=`${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`}scheduleItem({id:'ai-proactive-'+today,title:suggestion.text,type:suggestion.type,plannedStart:time,important:false,reminderMode:'notification'},date);localStorage.setItem(key,today)}
+function maybeSendBirthdayWebNotice(){
+  if(!appData.settings?.notifications)return;
+  if(!('Notification'in window)||Notification.permission!=='granted')return;
+  const now=new Date(),today=dateKey(now);
+  (appData.birthdays||[]).forEach(b=>{
+    const at=nextBirthdayReminderDate(b);if(!at)return;
+    if(dateKey(at)!==today)return;
+    const key=`birthday-web-${b.id}-${today}`;
+    if(localStorage.getItem(key))return;
+    const body=Number(b.remindDays||0)>0?`${b.name} 还有 ${b.remindDays} 天过生日 🎂`:`今天是 ${b.name} 的生日 🎂`;
+    new Notification('生日提醒',{body});
+    localStorage.setItem(key,'1');
+  });
+}
 
 function exportV2(){syncTodaySnapshot();persist();const payload=JSON.stringify(buildCloudBundle(),null,2),blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`task-manager-v2-backup-${todayStr()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('完整备份已导出')}
 async function importV2(event){const file=event.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());const bundle=data?.appData?data:{appData:data,aiMemory:null};if(!bundle?.appData||typeof bundle.appData!=='object'||!Array.isArray(bundle.appData.tasks))throw new Error();if(!confirm('导入内容会写入 V2 独立副本，不会修改原版。继续吗？'))return;importCloudBundle(bundle);appData.v2.migration={source:'manual-json-import',migratedAt:nowISO(),legacyHistoryUnavailable:!data.v2};persist();document.getElementById('v2ImportBanner').classList.add('v2-hidden');toast('已导入 V2 独立副本')}catch(e){alert('文件无法识别，请使用导出的 JSON 备份文件')}}
@@ -668,10 +786,12 @@ function captureLegacyActions(){document.addEventListener('click',e=>{const btn=
 
 window.v2Boot=function(){
   patchLegacyHooks();const source=loadIsolatedData();injectShell();installTimePickerHooks();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
+  try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
   if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
   autoGeneratePeriodicReviews();
   syncCloudForm();
   initNativeNotifications().then(()=>{schedulePendingReminders();scheduleAIMemorySuggestion()});
+  maybeSendBirthdayWebNotice();
 };
 })();
