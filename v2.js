@@ -368,24 +368,91 @@ function renderCalendarInlinePreview(ds){
   document.getElementById('v2PreviewCompact')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='compact';persist();renderCalendarInlinePreview(ds)});
   document.getElementById('v2PreviewAll')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='all';persist();renderCalendarInlinePreview(ds)});
 }
+function buildCalendarDayMeta(ds){
+  return{
+    items:displayItems(ds),
+    holiday:getHolidayLabel(ds),
+    birthdays:getBirthdayEntries(ds),
+    moods:getEmotionEntries(ds).length,
+    notes:getDayNotes(ds).length,
+    inspirations:getDayInspirationEntries(ds).length
+  }
+}
+function renderCalendarDayBadges(meta,size='normal'){
+  const parts=[];
+  if(meta.holiday)parts.push(`<span class="v2-day-badge holiday ${size}">🎐</span>`);
+  if(meta.birthdays.length)parts.push(`<span class="v2-day-badge birthday ${size}">🎂</span>`);
+  if(meta.moods)parts.push(`<span class="v2-day-badge mood ${size}">💭</span>`);
+  if(meta.notes)parts.push(`<span class="v2-day-badge note ${size}">📝</span>`);
+  if(meta.inspirations)parts.push(`<span class="v2-day-badge inspire ${size}">💡</span>`);
+  return parts.join('')
+}
+function renderCalendarTaskSummary(meta,size='normal'){
+  if(!meta.items.length)return '<div class="v2-day-empty">·</div>';
+  const grouped=meta.items.slice(0,size==='small'?3:6).reduce((acc,item)=>{(acc[item.type||'任务']=acc[item.type||'任务']||[]).push(item);return acc},{});
+  return Object.entries(grouped).map(([type,list])=>`<div class="v2-day-summary-row ${size}"><div class="v2-day-summary-dots">${list.map(item=>`<span class="v2-cal-mini-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span>`).join('')}</div><div class="v2-day-summary-text">${list.map(item=>esc(item.title)).join('、')}</div></div>`).join('');
+}
 function selectCalendarDay(ds){calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)}
 showDayTasks=function(value){selectCalendarDay(dateKey(value))}
-renderCalendarTimeSlot=function(){
-  const grid=document.getElementById('calGrid'),title=document.getElementById('calTitle'),wdRow=document.getElementById('weekdayRow');
-  const days=getWeekDays(calWeekOffset),today=todayStr();
-  title.innerHTML=iconImg('提醒',18)+`时段 ${days[0].getFullYear()}.${days[0].getMonth()+1}`;
-  wdRow.innerHTML=days.map(d=>`<div class="wd">${WDAY_NAMES[d.getDay()]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`).join('');
-  const slots=['上午','下午','晚上'];let html=`<div class="v2-slot-head-grid">`;
-  days.forEach(d=>{const ds=dateKey(d);html+=`<button class="v2-slot-head ${ds===today?'today':''}" onclick="selectCalendarDay('${ds}')">${d.getDate()}</button>`});html+=`</div>`;
-  slots.forEach(slot=>{html+=`<div class="v2-slot-label">${slot}</div><div class="v2-slot-grid">`;days.forEach(d=>{const ds=dateKey(d),items=displayItems(ds).filter(x=>getTimeSlotLabel(x.plannedStart||x.alarmTime||x.timeLabel||'')===slot),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),notes=getDayNotes(ds).length,emotions=getEmotionEntries(ds).length,inspirations=getDayInspirationEntries(ds).length;html+=`<button class="v2-slot-cell ${items.length||holiday||birthdays.length||notes||emotions||inspirations?'active':''}" onclick="selectCalendarDay('${ds}')">${items.slice(0,3).map(x=>`<div class="v2-slot-line"><span class="v2-cal-mini-dot" style="background:${COLOR[x.type]||COLOR.记录}"></span><span>${esc(x.title)}</span></div>`).join('')}${items.length>3?`<div class="v2-slot-more">+${items.length-3}</div>`:''}${holiday?`<div class="v2-slot-tag">${esc(holiday)}</div>`:''}${birthdays.length?`<div class="v2-slot-icons">🎂${notes?'📝':''}${emotions?'💭':''}${inspirations?'💡':''}</div>`:(notes||emotions||inspirations)?`<div class="v2-slot-icons">${emotions?'💭':''}${notes?'📝':''}${inspirations?'💡':''}</div>`:''}</button>`});html+=`</div>`});
-  grid.className='';grid.innerHTML=html;
-}
-renderCalendarYear=function(){
+renderCalendar=function(){
   const grid=document.getElementById('calGrid'),title=document.getElementById('calTitle'),wdRow=document.getElementById('weekdayRow'),td=document.getElementById('calDayTasks');
-  wdRow.innerHTML='';td.classList.remove('show');const year=new Date().getFullYear()+calWeekOffset;title.innerHTML=iconImg('提醒',18)+`${year}年`;
-  grid.className='';grid.style.display='grid';grid.style.gridTemplateColumns='repeat(3,1fr)';grid.style.gap='8px';grid.style.padding='4px 0';
-  let h='';for(let m=0;m<12;m++){const first=new Date(year,m,1),last=new Date(year,m+1,0),startDay=first.getDay()||7;h+=`<div class="v2-year-card" onclick="calWeekOffset=${calWeekOffset};calIsYear=false;calIsMonth=true;calTimeSlotView=false;var d=new Date();d.setFullYear(${year},${m},1);calWeekOffset=Math.round((d-new Date())/2592000000);renderCalendar()"><div class="v2-year-title">${m+1}月</div><div class="v2-year-week">${['一','二','三','四','五','六','日'].map(n=>`<span>${n}</span>`).join('')}</div><div class="v2-year-days">`;for(let i=1;i<startDay;i++)h+='<span></span>';for(let day=1;day<=last.getDate();day++){const ds=`${year}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,items=displayItems(ds),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),marks=(getEmotionEntries(ds).length?'💭':'')+(getDayNotes(ds).length?'📝':'')+(getDayInspirationEntries(ds).length?'💡':'');h+=`<button onclick="event.stopPropagation();selectCalendarDay('${ds}')" class="v2-year-day ${ds===todayStr()?'today':''} ${items.length||holiday||birthdays.length||marks?'active':''}">${day}${holiday?`<span class="v2-year-holiday">${esc(holiday).slice(0,1)}</span>`:''}${birthdays.length?'<span class="v2-year-bday">🎂</span>':''}${items.length?`<span class="v2-year-dot" style="background:${COLOR[items[0].type]||COLOR.记录}"></span>`:''}${marks?`<span class="v2-year-mark">${marks}</span>`:''}</button>`}h+=`</div></div>`}
-  grid.innerHTML=h;
+  const today=todayStr(),weekdays=['周一','周二','周三','周四','周五','周六','周日'];
+  td.classList.remove('show');
+  if(calTimeSlotView){
+    const days=getWeekDays(calWeekOffset);
+    title.innerHTML=iconImg('提醒',18)+`${days[0].getFullYear()}.${days[0].getMonth()+1} 时段`;
+    wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<div class="wd ${ds===today?'v2-strong-day':''}">${weekdays[i]}</div>`}).join('');
+    const slots=[{key:'上午',label:'上午',from:'06:00',to:'12:00'},{key:'中午',label:'中午',from:'12:00',to:'14:00'},{key:'下午',label:'下午',from:'14:00',to:'18:00'},{key:'晚上',label:'晚上',from:'18:00',to:'24:00'}];
+    let html='<div class="v2-timeboard">';
+    slots.forEach(slot=>{
+      html+=`<div class="v2-timeband"><div class="v2-timeband-label"><strong>${slot.label}</strong><span>${slot.from} - ${slot.to}</span></div><div class="v2-timeband-grid">`;
+      days.forEach(d=>{
+        const ds=dateKey(d),meta=buildCalendarDayMeta(ds);
+        const slotItems=meta.items.filter(x=>{const t=x.plannedStart||x.alarmTime||'';if(!t)return false;if(slot.key==='上午')return t<'12:00';if(slot.key==='中午')return t>='12:00'&&t<'14:00';if(slot.key==='下午')return t>='14:00'&&t<'18:00';return t>='18:00'});
+        html+=`<button class="v2-timeband-cell ${ds===today?'today':''}" onclick="selectCalendarDay('${ds}')">${slotItems.length?slotItems.map(x=>`<span class="v2-time-card" style="background:${COLOR[x.type]||COLOR.记录}22;border-color:${COLOR[x.type]||COLOR.记录}">${esc(x.title)}</span>`).join(''):'<span class="v2-time-empty"></span>'}</button>`;
+      });
+      html+='</div></div>';
+    });
+    html+='</div>';
+    grid.className='';grid.innerHTML=html;return
+  }
+  if(calIsYear){
+    const year=new Date().getFullYear()+calWeekOffset;
+    title.innerHTML=iconImg('提醒',18)+`${year}年`;
+    wdRow.innerHTML='';
+    grid.className='v2-year-grid';
+    let html='';
+    for(let m=0;m<12;m++){
+      const first=new Date(year,m,1),last=new Date(year,m+1,0),startDay=(first.getDay()+6)%7;
+      html+=`<div class="v2-year-card"><div class="v2-year-title">${m+1}月</div><div class="v2-year-week">${['一','二','三','四','五','六','日'].map(n=>`<span>${n}</span>`).join('')}</div><div class="v2-year-days">`;
+      for(let i=0;i<startDay;i++)html+='<span></span>';
+      for(let day=1;day<=last.getDate();day++){
+        const ds=`${year}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,meta=buildCalendarDayMeta(ds);
+        html+=`<button class="v2-year-day ${ds===today?'today':''} ${meta.items.length||meta.holiday||meta.birthdays.length||meta.notes||meta.moods||meta.inspirations?'active':''}" onclick="selectCalendarDay('${ds}')"><span class="v2-year-day-num">${day}</span><span class="v2-year-icons">${renderCalendarDayBadges(meta,'small')}</span>${meta.items.length?`<span class="v2-year-dot" style="background:${COLOR[meta.items[0].type]||COLOR.记录}"></span>`:''}</button>`;
+      }
+      html+='</div></div>';
+    }
+    grid.innerHTML=html;return
+  }
+  if(calIsMonth){
+    const base=new Date();base.setDate(1);base.setMonth(base.getMonth()+calWeekOffset);
+    title.innerHTML=iconImg('提醒',18)+`${base.getFullYear()}年${base.getMonth()+1}月`;
+    wdRow.innerHTML=weekdays.map(n=>`<div class="wd">${n}</div>`).join('');
+    grid.className='v2-month-grid';
+    const first=new Date(base.getFullYear(),base.getMonth(),1),last=new Date(base.getFullYear(),base.getMonth()+1,0),startDay=(first.getDay()+6)%7;
+    let html='';
+    for(let i=0;i<startDay;i++)html+='<div class="v2-month-day ghost"></div>';
+    for(let day=1;day<=last.getDate();day++){
+      const ds=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,meta=buildCalendarDayMeta(ds);
+      html+=`<button class="v2-month-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-month-top"><span class="v2-month-num">${day}</span><span class="v2-month-icons">${renderCalendarDayBadges(meta,'small')}</span></div><div class="v2-month-body">${renderCalendarTaskSummary(meta,'small')}</div></button>`;
+    }
+    grid.innerHTML=html;return
+  }
+  const days=getWeekDays(calWeekOffset),m=days[0];
+  title.innerHTML=iconImg('提醒',18)+`${m.getFullYear()}.${m.getMonth()+1}`;
+  wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<div class="wd ${ds===today?'v2-strong-day':''}">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`}).join('');
+  grid.className='v2-week-grid';
+  grid.innerHTML=days.map(d=>{const ds=dateKey(d),meta=buildCalendarDayMeta(ds);return `<button class="v2-week-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-week-top"><span class="v2-week-num">${d.getDate()}</span><span class="v2-week-icons">${renderCalendarDayBadges(meta,'normal')}</span></div><div class="v2-week-body">${renderCalendarTaskSummary(meta,'normal')}</div></button>`}).join('');
 }
 window.selectCalendarDay=selectCalendarDay;
 
