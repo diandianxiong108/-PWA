@@ -132,6 +132,14 @@ function getTimeSlotLabel(timeText){
   if(hour<18)return'下午';
   return'晚上'
 }
+function timeToMinutes(value){
+  const [h='0',m='0']=String(value||'').split(':');
+  return Number(h)*60+Number(m)
+}
+function formatHHMM(total){
+  const h=Math.floor(total/60),m=total%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
 function intensityFromText(text){
   if(/崩溃|特别难受|非常难受|压垮|爆炸|受不了/.test(text))return'重';
   if(/好累|焦虑|烦|难受|委屈|低落|沮丧|压力/.test(text))return'中';
@@ -416,24 +424,34 @@ renderCalendar=function(){
   if(calTimeSlotView){
     const days=getWeekDays(calWeekOffset);
     title.innerHTML=iconImg('提醒',18)+`${days[0].getFullYear()}.${days[0].getMonth()+1} 时段`;
-    wdRow.className='weekday-row v2-slot-weekdays';
-    wdRow.innerHTML=`<div class="wd v2-slot-corner">Time</div>`+days.map((d,i)=>{const ds=dateKey(d);return `<div class="wd ${ds===today?'v2-strong-day':''}">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`}).join('');
-    const bands=[{label:'AM',from:6,to:12},{label:'Noon',from:12,to:14},{label:'PM',from:14,to:18},{label:'Night',from:18,to:24}];
-    let html='<div class="v2-timetable">';
-    bands.forEach(band=>{
-      for(let hour=band.from;hour<band.to;hour++){
-        html+=`<div class="v2-time-row">`;
-        html+=`<div class="v2-time-axis ${hour===band.from?'band-start':''}"><span class="v2-time-band">${hour===band.from?band.label:''}</span><span class="v2-time-hour">${String(hour).padStart(2,'0')}:00 - ${String(hour+1).padStart(2,'0')}:00</span></div>`;
-        days.forEach(d=>{
-          const ds=dateKey(d),meta=buildCalendarDayMeta(ds);
-          const hourItems=meta.items.filter(x=>{const t=x.plannedStart||x.alarmTime||'';if(!t)return false;const h=Number(String(t).split(':')[0]||-1);return h===hour});
-          const markers=[meta.holiday?'🎐':'',meta.birthdays.length?'🎂':'',meta.moods?'💭':'',meta.notes?'📝':''].filter(Boolean).join(' ');
-          html+=`<button class="v2-time-cell ${ds===today?'today':''} ${hourItems.length?'active':''}" onclick="selectCalendarDay('${ds}')">${hourItems.length?hourItems.map(x=>`<span class="v2-time-item" style="background:${COLOR[x.type]||COLOR.记录}22;border-color:${COLOR[x.type]||COLOR.记录}">${esc(x.title)}</span>`).join(''):'<span class="v2-time-empty"></span>'}${markers&&hour===band.from?`<span class="v2-time-cell-icons">${markers}</span>`:''}</button>`;
-        });
-        html+=`</div>`;
-      }
-    });
-    html+='</div>';
+    let activeDs=calSelectedDate?dateKey(calSelectedDate):selectedDay||today;
+    if(!days.some(d=>dateKey(d)===activeDs))activeDs=days.some(d=>dateKey(d)===today)?today:dateKey(days[0]);
+    wdRow.className='weekday-row v2-slot-daytabs';
+    wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<button class="wd ${ds===today?'today':''} ${ds===activeDs?'active':''}" onclick="selectCalendarDay('${ds}')">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></button>`}).join('');
+    const meta=buildCalendarDayMeta(activeDs);
+    const dayItems=[...meta.items].filter(x=>x.plannedStart||x.alarmTime).sort((a,b)=>(a.plannedStart||a.alarmTime||'99:99').localeCompare(b.plannedStart||b.alarmTime||'99:99'));
+    const startHour=6,endHour=24,rowHeight=24,totalRows=endHour-startHour;
+    let timeline=`<div class="v2-day-timeline"><div class="v2-day-timeline-axis">`;
+    for(let hour=startHour;hour<endHour;hour++)timeline+=`<div class="v2-day-hour">${String(hour).padStart(2,'0')}:00</div>`;
+    timeline+=`</div><div class="v2-day-timeline-main"><div class="v2-day-gridlines">`;
+    for(let i=0;i<totalRows;i++)timeline+=`<div class="v2-day-gridline"></div>`;
+    timeline+=`</div><button class="v2-day-timeline-surface ${activeDs===today?'today':''}" onclick="selectCalendarDay('${activeDs}')">`;
+    if(dayItems.length){
+      timeline+=dayItems.map(item=>{
+        const startText=item.plannedStart||item.alarmTime||'09:00';
+        const endText=item.plannedEnd||formatHHMM(Math.min(timeToMinutes(startText)+60,24*60));
+        const startMin=Math.max(timeToMinutes(startText),startHour*60),endMin=Math.max(timeToMinutes(endText),startMin+30);
+        const top=((startMin-startHour*60)/60)*rowHeight;
+        const height=Math.max(((endMin-startMin)/60)*rowHeight,22);
+        const metaLine=`${esc(startText)} - ${esc(endText)}${item.timeLabel?` · ${esc(item.timeLabel)}`:''}`;
+        return `<div class="v2-day-block" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title">${esc(item.title)}</div><div class="v2-day-block-meta">${metaLine}</div></div>`
+      }).join('');
+    }else{
+      timeline+=`<div class="v2-day-block-empty">这一天还没有定时任务，点开后可以添加</div>`;
+    }
+    timeline+=`</button></div></div>`;
+    const sideInfo=`<div class="v2-day-sideinfo">${meta.holiday?`<span>🎐 ${esc(meta.holiday)}</span>`:''}${meta.birthdays.length?`<span>🎂 ${meta.birthdays.map(x=>esc(x.name)).join('、')}</span>`:''}${meta.moods?`<span>💭 ${meta.moods} 条情绪</span>`:''}${meta.notes?`<span>📝 ${meta.notes} 条随记</span>`:''}${meta.inspirations?`<span>💡 ${meta.inspirations} 条灵感</span>`:''}</div>`;
+    let html=`<div class="v2-slot-daywrap"><div class="v2-slot-dayhead"><strong>${activeDs}</strong><span>点击上方日期切换，点击下方时间轴展开当天详情</span></div>${sideInfo}${timeline}</div>`;
     grid.className='v2-slot-grid-wrap';grid.innerHTML=html;return
   }
   if(calIsYear){
@@ -475,7 +493,7 @@ renderCalendar=function(){
   wdRow.className='weekday-row v2-weekdays';
   wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<div class="wd ${ds===today?'v2-strong-day':''}">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`}).join('');
   grid.className='v2-week-grid';
-  grid.innerHTML=days.map(d=>{const ds=dateKey(d),meta=buildCalendarDayMeta(ds);return `<button class="v2-week-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-week-top"><span class="v2-week-num">${d.getMonth()+1}.${d.getDate()}</span><span class="v2-week-icons">${renderCalendarDayBadges(meta,'normal')}</span></div><div class="v2-week-body">${renderCalendarTaskSummary(meta,'normal')}</div></button>`}).join('');
+  grid.innerHTML=days.map(d=>{const ds=dateKey(d),meta=buildCalendarDayMeta(ds);return `<button class="v2-week-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-week-top"><span class="v2-week-num">${d.getMonth()+1}.${d.getDate()}</span><span class="v2-week-icons">${renderCalendarDayBadges(meta,'normal')}</span></div><div class="v2-week-body">${renderCalendarTaskSummary(meta,'small')}</div></button>`}).join('');
 }
 window.selectCalendarDay=selectCalendarDay;
 

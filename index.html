@@ -1387,9 +1387,10 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-chat-add]'
 
 // Init
 if('Notification'in window&&Notification.permission==='default')Notification.requestPermission();
+const isNativeTaskApp=!!(window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform());
 // SW registration with update detection
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDailyReset()});
-if('serviceWorker'in navigator){
+if('serviceWorker'in navigator&&!isNativeTaskApp){
   navigator.serviceWorker.register('sw.js').then(reg=>{
     reg.addEventListener('updatefound',()=>{
       const sw=reg.installing;
@@ -1406,6 +1407,8 @@ if('serviceWorker'in navigator){
     refreshing=true;
     if(confirm('应用有更新，是否立即刷新？'))window.location.reload(true);
   });
+}else if('serviceWorker'in navigator&&isNativeTaskApp){
+  navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(reg=>reg.unregister())).catch(()=>{});
 }
 
 function saveExtra(){const inp=document.getElementById('extraInput'),text=inp.value.trim();if(!text)return;const type=document.getElementById('extraType').value;const duration=parseInt(document.getElementById('extraDuration').value)||null;const timeSlot=document.getElementById('extraTimeSlot').value||null;const task={id:genId(),type,title:text,scheduledStart:null,scheduledEnd:null,timeLabel:timeSlot,alarmTime:null,scheduledDate:null};if(type==='每日'){task.frequency='每天';task.subtask='';task.completedToday=true;task.lastCompletedDate=todayStr()}else if(type==='临时'){task.deadline=null;task.deadlineConfirmed=false;task.hiddenToday=false;task.priority=2;task.duration=duration}else if(type==='项目'){task.steps=[{id:genId(),title:text,duration:duration||30,done:true}];task.reminderTime='22:30';task.isTiming=false;task.startTime=null}else if(type==='随手记'){appData.notes.push({id:genId(),title:'',text:text,date:todayStr(),createdAt:new Date().toISOString(),pinned:false,done:true});inp.value='';document.getElementById('extraDuration').value='';document.getElementById('extraTimeSlot').value='';renderExtra();toJSONBin();return}appData.tasks.push(task);inp.value='';document.getElementById('extraDuration').value='';document.getElementById('extraTimeSlot').value='';render();toJSONBin()}
