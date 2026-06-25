@@ -1,5 +1,23 @@
 /* V2 additions deliberately reuse the original palette and cat assets. */
 body.v2-ready{padding-bottom:80px}
+.v2-capture-fab{bottom:88px!important;background:#8acb90!important}
+.v2-capture-dialog .chat-header .left{font-size:15px;font-weight:700;color:var(--green-d)}
+.v2-capture-preview{background:#f8fbf8;border:1px solid var(--border);border-radius:12px;padding:10px;min-height:72px}
+.v2-capture-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:12px;color:var(--green-d);font-weight:600}
+.v2-capture-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px}
+.v2-capture-card strong{display:block;font-size:13px;color:var(--text)}
+.v2-capture-sub{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.v2-capture-sub span{font-size:11px;background:var(--green-l);color:var(--green-d);padding:3px 7px;border-radius:999px}
+.v2-task-checklist{display:grid;gap:6px;margin:8px 0 10px}
+.v2-check-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fafcfa;color:var(--text);font:inherit;text-align:left}
+.v2-check-item.done{background:#eef7ef;color:#91a091}
+.v2-check-item.done .v2-check-text{text-decoration:line-through}
+.v2-check-box{width:18px;height:18px;border-radius:50%;border:1px solid #bfd8c1;display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto;background:#fff}
+.v2-check-item.done .v2-check-box{background:var(--green);border-color:var(--green);color:#fff}
+.v2-check-text{font-size:12px;line-height:1.4}
+.v2-sheet-checklist{display:grid;gap:4px;margin-top:8px}
+.v2-sheet-check{display:flex;gap:6px;align-items:flex-start;font-size:11px;color:var(--text-l)}
+.v2-sheet-check.done{text-decoration:line-through;opacity:.7}
 .v2-hidden{display:none!important}
 .v2-home-module{display:none!important}
 .v2-nav,.v2-topline{display:none!important}
