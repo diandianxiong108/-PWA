@@ -439,14 +439,17 @@ function renderCalendarDayBadges(meta,size='normal'){
   if(meta.inspirations)parts.push(`<span class="v2-day-badge inspire ${size}">💡</span>`);
   return parts.join('')
 }
+function briefTaskTitle(title,maxLen=4){
+  const plain=String(title||'').replace(/[，,、。；;：:]/g,'').trim();
+  return plain.length>maxLen?`${plain.slice(0,maxLen)}…`:plain
+}
 function renderCalendarTaskSummary(meta,size='normal'){
   if(!meta.items.length)return '<div class="v2-day-empty">·</div>';
-  const grouped=meta.items.slice(0,size==='small'?3:6).reduce((acc,item)=>{(acc[item.type||'任务']=acc[item.type||'任务']||[]).push(item);return acc},{});
-  return Object.entries(grouped).map(([type,list])=>{
-    const text=list.map(item=>esc(item.title)).join('、');
-    const level=text.length>18||list.length>=3?'dense':text.length>10||list.length>=2?'compact':'';
-    return `<div class="v2-day-summary-row ${size} ${level}"><div class="v2-day-summary-dots">${list.map(item=>`<span class="v2-cal-mini-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span>`).join('')}</div><div class="v2-day-summary-text">${text}</div></div>`
-  }).join('');
+  const items=meta.items.slice(0,size==='small'?2:2);
+  return items.map(item=>{
+    const short=briefTaskTitle(item.title,size==='small'?4:5);
+    return `<div class="v2-day-summary-chip ${size}" style="border-color:${COLOR[item.type]||COLOR.记录}33"><span class="v2-day-summary-chip-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span class="v2-day-summary-chip-text">${esc(short)}</span></div>`
+  }).join('')+(meta.items.length>items.length?`<div class="v2-day-summary-more">+${meta.items.length-items.length}</div>`:'');
 }
 function selectCalendarDay(ds){calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)}
 showDayTasks=function(value){selectCalendarDay(dateKey(value))}
@@ -476,8 +479,8 @@ renderCalendar=function(){
         const startMin=Math.max(timeToMinutes(startText),startHour*60),endMin=Math.max(timeToMinutes(endText),startMin+30);
         const top=((startMin-startHour*60)/60)*rowHeight;
         const height=Math.max(((endMin-startMin)/60)*rowHeight,22);
-        const metaLine=`${esc(startText)} - ${esc(endText)}${item.timeLabel?` · ${esc(item.timeLabel)}`:''}${(!item.plannedStart&&!item.alarmTime)?' · 自动安排':''}`;
-        return `<div class="v2-day-block" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title">${esc(item.title)}</div><div class="v2-day-block-meta">${metaLine}</div></div>`
+        const metaLine=`${esc(startText)} - ${esc(endText)}`;
+        return `<div class="v2-day-block" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title">${esc(item.title)}</div>${height>=42?`<div class="v2-day-block-meta">${metaLine}</div>`:''}</div>`
       }).join('');
     }else{
       timeline+=`<div class="v2-day-block-empty">这一天还没有定时任务，点开后可以添加</div>`;
