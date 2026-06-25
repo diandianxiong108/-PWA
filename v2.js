@@ -1,9 +1,12 @@
 (function(){
 const STORAGE_KEY='task-manager-v2-data';
 const LEGACY_KEY='appCache';
-const APP_VERSION='2026.06.25.3';
-const UPDATE_FEED_URL='https://cdn.jsdelivr.net/gh/diandianxiong108/-PWA@main/version.json';
-const UPDATE_PAGE_URL='https://github.com/diandianxiong108/-PWA/actions/workflows/build-apk.yml';
+const RELEASE_API_URL='https://api.github.com/repos/diandianxiong108/-PWA/releases/latest';
+const UPDATE_PAGE_URL='https://github.com/diandianxiong108/-PWA/releases/latest';
+let APP_VERSION='2.0.web';
+let APP_VERSION_CODE=0;
+let APP_PACKAGE_NAME='';
+let pendingRemoteUpdate=null;
 const COLOR={每日:'#64b5f6',项目:'#ce93d8',临时:'#ffb74d',循环:'#81c784',记录:'#90a4ae'};
 const HOLIDAYS_2026={
   '2026-01-01':'元旦',
@@ -40,6 +43,9 @@ function dateKey(value){const d=value instanceof Date?value:new Date(value);retu
 function nowISO(){return new Date().toISOString()}
 function parseJSON(value,fallback){try{return JSON.parse(value)}catch(e){return fallback}}
 function hashId(value){let h=0;for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return Math.abs(h)||1}
+function numericVersion(value){const matched=String(value||'').match(/(\d+)(?!.*\d)/);return matched?Number(matched[1])||0:0}
+function versionToken(){return String(APP_VERSION_CODE||APP_VERSION||'0')}
+function versionLabel(){return APP_VERSION_CODE?`${APP_VERSION}`:APP_VERSION}
 function toast(text){let el=document.getElementById('v2Toast');if(!el){el=document.createElement('div');el.id='v2Toast';el.className='v2-toast';document.body.appendChild(el)}el.textContent=text;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200)}
 window.v2Toast=toast;
 window.openTaskCalendar=openTaskCalendar;
@@ -105,6 +111,15 @@ function persist(){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));return true}catch(e){toast('本地保存失败，请导出备份');return false}
 }
 function esc(value){return String(value??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
+function updateVersionChip(){const el=document.getElementById('v2VersionChip');if(el)el.textContent=`版本 ${versionLabel()}`}
+function setRuntimeAppInfo(info){
+  APP_VERSION=info?.versionName||APP_VERSION;
+  APP_VERSION_CODE=Number(info?.versionCode)||APP_VERSION_CODE||0;
+  APP_PACKAGE_NAME=info?.packageName||APP_PACKAGE_NAME||'';
+  window.TASK_MANAGER_APP_VERSION=APP_VERSION;
+  window.TASK_MANAGER_APP_VERSION_CODE=APP_VERSION_CODE;
+  updateVersionChip();
+}
 function getHolidayLabel(ds){return HOLIDAYS_2026[ds]||''}
 function getBirthdayEntries(ds){const dt=new Date(ds+'T12:00:00'),m=dt.getMonth()+1,d=dt.getDate();return(appData.birthdays||[]).filter(x=>Number(x.month)===m&&Number(x.day)===d)}
 function getEmotionEntries(ds){return(appData.v2?.emotionLogs||[]).filter(x=>x.date===ds)}
@@ -469,7 +484,7 @@ function injectShell(){
   window.addEventListener('popstate',()=>{if(routeState)closeRouteInternal()});
   document.getElementById('v2ImportBtn').addEventListener('click',()=>document.getElementById('v2ImportInput').click());
   document.getElementById('v2ImportInput').addEventListener('change',importV2);
-  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML=`<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-row" style="margin-top:8px"><span class="v2-chip active">版本 ${APP_VERSION}</span><button class="v2-secondary" id="v2CheckUpdateBtn">检查更新</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder="输入 X-Master-Key" type="password"></label><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CloudUpload">上传云端</button><button class="v2-secondary" id="v2CloudRestore">恢复云端</button><button class="v2-secondary" id="v2CloudUploadCompress">上传后压缩本地</button><button class="v2-secondary" id="v2CloudCompress">仅压缩本地旧记录</button></div><div id="v2CloudStatus" class="hint"></div></div></div>`;settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CheckUpdateBtn').addEventListener('click',()=>checkForAppUpdates(false));document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm()}
+  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML=`<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-row" style="margin-top:8px"><span class="v2-chip active" id="v2VersionChip">版本 ${versionLabel()}</span><button class="v2-secondary" id="v2CheckUpdateBtn">检查更新</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder="输入 X-Master-Key" type="password"></label><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CloudUpload">上传云端</button><button class="v2-secondary" id="v2CloudRestore">恢复云端</button><button class="v2-secondary" id="v2CloudUploadCompress">上传后压缩本地</button><button class="v2-secondary" id="v2CloudCompress">仅压缩本地旧记录</button></div><div id="v2CloudStatus" class="hint"></div></div></div>`;settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CheckUpdateBtn').addEventListener('click',()=>checkForAppUpdates(false));document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm();updateVersionChip()}
   buildPlanner();injectRecordsTools();
 }
 
@@ -535,10 +550,11 @@ function ensureUpdateModal(){
   let overlay=document.getElementById('v2UpdateOverlay');
   if(overlay)return overlay;
   overlay=document.createElement('div');overlay.id='v2UpdateOverlay';overlay.className='chat-overlay';
-  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">发现新版本</div><button class="chat-close" id="v2UpdateClose">✕</button></div><div class="v2-panel" style="margin:0"><div id="v2UpdateBody" class="hint">正在检查更新…</div><div class="v2-row end" style="margin-top:12px"><button class="v2-secondary" id="v2UpdateLater">稍后再说</button><a class="v2-primary" id="v2UpdateGo" href="${UPDATE_PAGE_URL}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">去下载新包</a></div></div></div>`;
+  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">发现新版本</div><button class="chat-close" id="v2UpdateClose">✕</button></div><div class="v2-panel" style="margin:0"><div id="v2UpdateBody" class="hint">正在检查更新…</div><div class="v2-row end" style="margin-top:12px"><button class="v2-secondary" id="v2UpdateLater">稍后再说</button><a class="v2-secondary" id="v2UpdatePage" href="${UPDATE_PAGE_URL}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">下载页</a><button class="v2-primary" id="v2UpdateGo">立即更新</button></div></div></div>`;
   document.body.appendChild(overlay);
   document.getElementById('v2UpdateClose').addEventListener('click',()=>overlay.classList.remove('show'));
   document.getElementById('v2UpdateLater').addEventListener('click',()=>overlay.classList.remove('show'));
+  document.getElementById('v2UpdateGo').addEventListener('click',()=>{if(pendingRemoteUpdate)startAppUpdate(pendingRemoteUpdate)});
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('show')});
   return overlay
 }
@@ -547,28 +563,95 @@ function compareVersions(a,b){
   for(let i=0;i<len;i++){const av=pa[i]||0,bv=pb[i]||0;if(av>bv)return 1;if(av<bv)return-1}
   return 0
 }
+function normalizeReleasePayload(data){
+  const assets=Array.isArray(data?.assets)?data.assets:[];
+  const apkAsset=assets.find(x=>/\.apk$/i.test(x?.name||''))||assets[0]||null;
+  const bodyText=String(data?.body||'');
+  const notes=bodyText.split(/\r?\n/).map(x=>x.replace(/^[-*]\s*/,'').trim()).filter(Boolean).slice(0,8);
+  const tag=data?.tag_name||'';
+  const versionCode=numericVersion(tag)||numericVersion(data?.name)||numericVersion(apkAsset?.name);
+  const versionName=(String(data?.name||'').match(/\d+\.\d+\.\d+/)||[])[0]||`2.0.${versionCode||0}`;
+  return{
+    versionCode,
+    versionName,
+    version:versionName,
+    publishedAt:data?.published_at||nowISO(),
+    downloadUrl:apkAsset?.browser_download_url||data?.html_url||UPDATE_PAGE_URL,
+    pageUrl:data?.html_url||UPDATE_PAGE_URL,
+    notes:notes.length?notes:['自动构建的新安装包，可直接在应用内下载并安装。']
+  }
+}
+async function initRuntimeAppInfo(){
+  const plugin=nativePlugins()?.AppUpdate;
+  if(plugin?.getAppInfo){
+    try{
+      const info=await plugin.getAppInfo();
+      setRuntimeAppInfo(info);
+      return info
+    }catch(e){}
+  }
+  updateVersionChip();
+  return{versionName:APP_VERSION,versionCode:APP_VERSION_CODE,packageName:APP_PACKAGE_NAME}
+}
+async function fetchLatestRelease(){
+  const res=await fetch(`${RELEASE_API_URL}?t=${Date.now()}`,{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
+  if(!res.ok)throw new Error('UPDATE_FETCH_FAILED');
+  const remote=normalizeReleasePayload(await res.json());
+  localStorage.setItem('tm_last_remote_release',JSON.stringify(remote));
+  return remote
+}
 function showUpdatePrompt(remote){
-  const overlay=ensureUpdateModal(),body=document.getElementById('v2UpdateBody'),go=document.getElementById('v2UpdateGo');
+  pendingRemoteUpdate=remote;
+  const overlay=ensureUpdateModal(),body=document.getElementById('v2UpdateBody'),page=document.getElementById('v2UpdatePage');
   const notes=(remote.notes||[]).map(x=>`<li>${esc(x)}</li>`).join('');
-  body.innerHTML=`<div class="v2-capture-head"><span>当前 ${APP_VERSION}</span><span>最新 ${esc(remote.version||'未知')}</span></div><p style="margin:0 0 8px">有新版本可以安装。为了避免华为手机继续显示旧页面，这版会在启动时主动清旧缓存。</p>${notes?`<ul style="margin:0;padding-left:18px">${notes}</ul>`:''}`;
-  go.href=remote.downloadUrl||UPDATE_PAGE_URL;
+  body.innerHTML=`<div class="v2-capture-head"><span>当前 ${versionLabel()}</span><span>最新 ${esc(remote.versionName||remote.version||'未知')}</span></div><p style="margin:0 0 8px">这次不是只弹提示，而是会直接下载新版 APK，下载完自动拉起安装。为了避免华为手机继续显示旧页面，安装新版后也会主动清旧缓存。</p>${notes?`<ul style="margin:0;padding-left:18px">${notes}</ul>`:''}`;
+  page.href=remote.pageUrl||remote.downloadUrl||UPDATE_PAGE_URL;
   overlay.classList.add('show');
 }
 async function applyRuntimeVersionMigration(){
   const last=localStorage.getItem('tm_app_runtime_version');
-  if(last===APP_VERSION)return false;
+  if(last===versionToken())return false;
   localStorage.setItem('tm_app_runtime_prev',last||'');
-  localStorage.setItem('tm_app_runtime_version',APP_VERSION);
+  localStorage.setItem('tm_app_runtime_version',versionToken());
   await clearRuntimeCaches();
   return true
 }
+async function startAppUpdate(remote){
+  const plugin=nativePlugins()?.AppUpdate;
+  const url=remote?.downloadUrl||remote?.pageUrl||UPDATE_PAGE_URL;
+  if(plugin?.downloadAndInstall){
+    try{
+      const info=await plugin.getAppInfo();
+      if(info?.canRequestPackageInstalls===false){
+        await plugin.openInstallUnknownSourcesSettings();
+        toast('请先允许本应用安装更新包，然后再点一次“立即更新”');
+        return false
+      }
+      await plugin.downloadAndInstall({url,fileName:`task-manager-v2-${remote.versionName||remote.versionCode||Date.now()}.apk`,title:`任务管家 ${remote.versionName||''}`});
+      document.getElementById('v2UpdateOverlay')?.classList.remove('show');
+      toast('开始下载新版本，下载完成后会自动弹出安装');
+      return true
+    }catch(e){
+      if(String(e?.message||e).includes('INSTALL_UNKNOWN_APPS_PERMISSION_REQUIRED')){
+        try{await plugin.openInstallUnknownSourcesSettings()}catch(err){}
+        toast('请允许安装未知应用后，再点一次“立即更新”');
+        return false
+      }
+    }
+  }
+  window.open(url,'_blank','noopener');
+  toast('已打开下载页面，请下载安装新包');
+  return false
+}
 async function checkForAppUpdates(silent=true){
   try{
-    const res=await fetch(`${UPDATE_FEED_URL}?t=${Date.now()}`,{cache:'no-store'});
-    if(!res.ok)throw new Error('UPDATE_FETCH_FAILED');
-    const remote=await res.json();
-    if(compareVersions(remote.version,APP_VERSION)>0){
-      localStorage.setItem('tm_update_latest_seen',String(remote.version));
+    const remote=await fetchLatestRelease();
+    const remoteToken=String(remote.versionCode||remote.versionName||remote.version||'');
+    const localCode=Number(APP_VERSION_CODE)||0;
+    const hasUpdate=localCode?Number(remote.versionCode||0)>localCode:compareVersions(remote.versionName||remote.version,APP_VERSION)>0;
+    if(hasUpdate){
+      if(silent&&localStorage.getItem('tm_update_latest_seen')===remoteToken)return remote;
+      localStorage.setItem('tm_update_latest_seen',remoteToken);
       showUpdatePrompt(remote);
       return remote
     }
@@ -1082,7 +1165,7 @@ function captureLegacyActions(){document.addEventListener('click',e=>{const btn=
 
 window.v2Boot=function(){
   patchLegacyHooks();const source=loadIsolatedData();injectShell();installTimePickerHooks();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
-  applyRuntimeVersionMigration().then(changed=>{if(changed)toast(`已切换到新版本 ${APP_VERSION}`)});
+  initRuntimeAppInfo().then(()=>applyRuntimeVersionMigration()).then(changed=>{if(changed)toast(`已切换到新版本 ${versionLabel()}`)});
   setTimeout(()=>checkForAppUpdates(true),1600);
   try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
   if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');

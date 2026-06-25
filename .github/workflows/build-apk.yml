@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -37,6 +37,20 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Prepare release metadata
+        shell: bash
+        run: |
+          echo "APK_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "APK_VERSION_NAME=2.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          {
+            echo "自动构建安装包"
+            echo
+            echo "- 版本：2.0.${{ github.run_number }}"
+            echo "- 提交：${GITHUB_SHA::7}"
+            echo "- 时间：$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "- 说明：此版本支持应用内检查更新、下载更新包、下载完成后自动拉起安装。"
+          } > release-notes.txt
+
       - name: Sync web assets and plugins
         run: npm run cap:sync
 
@@ -61,10 +75,23 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
         run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon
 
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk task-manager-v2-huawei-${{ github.run_number }}.apk
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: 任务管家 V2 ${{ env.APK_VERSION_NAME }}
+          body_path: release-notes.txt
+          files: task-manager-v2-huawei-${{ github.run_number }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: task-manager-v2-huawei
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: task-manager-v2-huawei-${{ github.run_number }}.apk
           if-no-files-found: error
           retention-days: 30
