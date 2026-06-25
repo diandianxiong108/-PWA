@@ -1350,6 +1350,7 @@ document.getElementById('chatSummaryBtn').addEventListener('click',()=>{document
 async function sendChat(){
   const t=chatInput.value.trim();if(!t)return;chatInput.value='';
   const localEmotionEntry=window.buildEmotionLog?window.buildEmotionLog(t,{source:'chat-user'}):null;
+  const localRhythmEntry=window.parseLifeRhythmText?window.parseLifeRhythmText(t,todayStr()):null;
   addBubble(t,'user');chatHistory.push({role:'user',content:t});chatRound++;
   const ty=document.createElement('div');ty.className='chat-typing';ty.innerHTML='<span></span><span></span><span></span>';ty.id='chatTyping';chatMsgs.appendChild(ty);chatMsgs.scrollTop=chatMsgs.scrollHeight;
   try{
@@ -1374,8 +1375,12 @@ async function sendChat(){
     if(emotionEntry&&emotionEntry.event){
       window.saveEmotionLog?.({...emotionEntry,source:emotionEntry.source||'chat',date:emotionEntry.date||todayStr(),createdAt:emotionEntry.createdAt||new Date().toISOString()});
     }
+    if(localRhythmEntry&&Object.values(localRhythmEntry).some(v=>Array.isArray(v)?v.length:v)){
+      const base=window.getLifeRhythmEntry?window.getLifeRhythmEntry(todayStr(),true):{date:todayStr()};
+      window.saveLifeRhythmEntry?.(Object.assign(base,localRhythmEntry,{date:todayStr(),source:'chat'}));
+    }
     if(data.suggestedTasks&&data.suggestedTasks.length){const sd=document.createElement('div');sd.className='chat-suggest';sd.innerHTML=data.suggestedTasks.map(t=>`<div class="chat-suggest-item"><div class="chat-suggest-info"><div class="chat-suggest-title">${t.title||''}</div><div class="chat-suggest-meta">${t.type||''}</div></div><button class="chat-add-btn" data-chat-add='${esc(JSON.stringify(t))}'>✅ 添加</button></div>`).join('');chatMsgs.appendChild(sd)}
-    if((data.completedItems&&data.completedItems.length)||emotionEntry){
+    if((data.completedItems&&data.completedItems.length)||emotionEntry||localRhythmEntry){
       renderCalendarInlinePreview?.(todayStr());
       if(window.currentDaySheetDate===todayStr())renderDaySheet?.(todayStr());
     }
