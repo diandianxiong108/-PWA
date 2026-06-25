@@ -144,12 +144,17 @@ body.v2-ready #calendarSection .v2-cal-holiday{font-size:9px;color:#e65100;backg
 body.v2-ready #calendarSection .v2-cal-bday,body.v2-ready #calendarSection .v2-cal-note,body.v2-ready #calendarSection .v2-cal-mood{font-size:10px;line-height:1}
 body.v2-ready #calendarSection .cal-day{padding-top:14px;padding-bottom:14px}
 .v2-strong-day{background:var(--green-l);border-radius:10px;color:var(--green-d)!important;font-weight:700}
-.v2-week-grid{display:grid;grid-template-columns:1fr;gap:8px}
+.v2-weekdays{display:grid!important;grid-template-columns:repeat(7,1fr)!important;gap:6px}
+.v2-month-weekdays{display:grid!important;grid-template-columns:repeat(7,1fr)!important;gap:4px;width:74%;margin:0 auto 6px}
+.v2-slot-weekdays{display:grid!important;grid-template-columns:92px repeat(7,minmax(92px,1fr))!important;gap:6px;overflow-x:auto;padding-bottom:4px}
+.v2-slot-weekdays .wd,.v2-weekdays .wd,.v2-month-weekdays .wd{padding:6px 2px}
+.v2-slot-corner{background:#fff;border-radius:10px}
+.v2-week-grid{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));gap:6px;overflow-x:auto}
 .v2-week-day,.v2-month-day{border:0;background:#fff;border-radius:14px;padding:10px;text-align:left;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04)}
 .v2-week-day.today,.v2-month-day.today,.v2-timeband-cell.today{outline:2px solid var(--green);background:#f1fbf1}
 .v2-week-day.selected,.v2-month-day.selected{background:var(--green-l)}
 .v2-week-top,.v2-month-top{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px}
-.v2-week-num,.v2-month-num{font-size:15px;font-weight:700}
+.v2-week-num,.v2-month-num{font-size:13px;font-weight:700}
 .v2-week-icons,.v2-month-icons{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
 .v2-day-badge{font-size:12px;line-height:1}
 .v2-day-badge.small{font-size:10px}
@@ -160,21 +165,26 @@ body.v2-ready #calendarSection .cal-day{padding-top:14px;padding-bottom:14px}
 .v2-day-summary-text{font-size:12px;line-height:1.45;color:var(--text)}
 .v2-day-summary-row.small .v2-day-summary-text{font-size:10px;line-height:1.35}
 .v2-day-empty{font-size:12px;color:#c7d1c7;padding:8px 0}
-.v2-month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.v2-month-day{min-height:110px;padding:8px}
+.v2-month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;width:74%;margin:0 auto}
+.v2-month-day{min-height:82px;padding:6px;border-radius:12px}
 .v2-month-day.ghost{background:transparent;box-shadow:none;pointer-events:none}
 .v2-month-body{margin-top:2px}
 .v2-year-grid{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:8px!important;padding:4px 0!important}
 .v2-year-day-num{display:block}
 .v2-year-icons{position:absolute;top:0;right:0;display:flex;gap:1px;flex-wrap:wrap;justify-content:flex-end;max-width:22px}
-.v2-timeboard{display:grid;gap:10px}
-.v2-timeband{background:#fff;border-radius:14px;padding:10px}
-.v2-timeband + .v2-timeband{border-top:4px solid var(--green-l)}
-.v2-timeband-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:var(--green-d)}
-.v2-timeband-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;position:relative}
-.v2-timeband-grid::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(to bottom,transparent 0,transparent 22px,rgba(153,153,153,.18) 22px,rgba(153,153,153,.18) 23px);pointer-events:none}
-.v2-timeband-cell{min-height:86px;border:0;border-radius:12px;background:#f8faf8;padding:6px;display:flex;flex-direction:column;gap:5px;align-items:stretch;text-align:left;position:relative}
-.v2-time-card{display:block;font-size:10px;line-height:1.35;padding:4px 5px;border-radius:8px;border:1px solid transparent;background:#fff}
+.v2-slot-grid-wrap{overflow-x:auto}
+.v2-timetable{display:grid;gap:0;min-width:828px}
+.v2-time-row{display:grid;grid-template-columns:92px repeat(7,minmax(92px,1fr));gap:6px;margin-bottom:6px}
+.v2-time-axis,.v2-time-cell{min-height:58px}
+.v2-time-axis{background:#fff;border-radius:12px;padding:6px;display:flex;flex-direction:column;justify-content:center;border-left:4px solid transparent}
+.v2-time-axis.band-start{border-left-color:var(--green)}
+.v2-time-band{font-size:10px;font-weight:700;color:var(--green-d);margin-bottom:2px}
+.v2-time-hour{font-size:10px;line-height:1.35;color:var(--text-l)}
+.v2-time-cell{border:0;border-radius:12px;background:#f8faf8;padding:6px;display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;align-items:flex-start;text-align:left;position:relative}
+.v2-time-cell.today{outline:2px solid var(--green);background:#f1fbf1}
+.v2-time-cell.active{background:#fff}
+.v2-time-item{display:inline-flex;max-width:100%;font-size:10px;line-height:1.35;padding:4px 5px;border-radius:8px;border:1px solid transparent;background:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v2-time-cell-icons{position:absolute;right:5px;bottom:4px;font-size:9px;opacity:.8}
 .v2-time-empty{display:block;min-height:10px}
 .v2-slot-head-grid,.v2-slot-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .v2-slot-head{border:0;border-radius:10px;background:#fff;padding:6px 0;font:inherit;color:var(--text)}
@@ -189,7 +199,7 @@ body.v2-ready #calendarSection .cal-day{padding-top:14px;padding-bottom:14px}
 .v2-slot-icons{position:absolute;right:4px;bottom:4px;font-size:9px;opacity:.85}
 .v2-year-card{background:#fff;border-radius:12px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .v2-year-title{text-align:center;font-size:11px;font-weight:700;margin-bottom:4px}
-.v2-year-week{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:7px;color:#b7b7b7;text-align:center;margin-bottom:2px}
+.v2-year-week{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:6px;color:#b7b7b7;text-align:center;margin-bottom:2px}
 .v2-year-days{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
 .v2-year-day{position:relative;border:0;background:transparent;border-radius:5px;font-size:8px;padding:2px 0;color:var(--text)}
 .v2-year-day.active{background:rgba(232,245,233,.55)}
