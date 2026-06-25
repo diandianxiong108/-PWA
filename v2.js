@@ -106,6 +106,9 @@ function loadIsolatedData(){
   }
   ensureDataShape();persist();return 'empty';
 }
+function hasMeaningfulData(){
+  return !!((appData.tasks||[]).length||(appData.notes||[]).length||(appData.inspirations||[]).length||(appData.birthdays||[]).length||(appData.records?.entries||[]).length)
+}
 
 function persist(){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));return true}catch(e){toast('本地保存失败，请导出备份');return false}
@@ -139,6 +142,31 @@ function timeToMinutes(value){
 function formatHHMM(total){
   const h=Math.floor(total/60),m=total%60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+function detectTimeFromText(text){
+  const src=String(text||'');
+  const match=src.match(/(凌晨|早上|上午|中午|下午|傍晚|晚上|今晚)?\s*([0-2]?\d)(?:[:点时](\d{1,2}))?\s*(?:分)?/);
+  if(!match)return null;
+  let hour=Number(match[2]||0),minute=Number(match[3]||0);
+  const period=match[1]||'';
+  if(period==='凌晨'){if(hour===12)hour=0}
+  else if(period==='中午'){if(hour<11)hour+=12}
+  else if(/下午|傍晚|晚上|今晚/.test(period)){if(hour<12)hour+=12}
+  else if(/早上|上午/.test(period)&&hour===12)hour=0;
+  if(hour>23||minute>59)return null;
+  const value=`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+  return {value,label:getTimeSlotLabel(value)}
+}
+function inferItemStart(item,index=0){
+  const exact=item.plannedStart||item.alarmTime||'';
+  if(exact)return exact;
+  if(item.timeLabel==='上午')return ['08:00','09:00','10:00','11:00'][index%4];
+  if(item.timeLabel==='下午')return ['14:00','15:00','16:00','17:00'][index%4];
+  if(item.timeLabel==='晚上')return ['19:00','20:00','21:00'][index%3];
+  if(item.type==='每日')return ['08:00','09:00','10:00'][index%3];
+  if(item.type==='项目')return ['14:00','15:00','16:00'][index%3];
+  if(item.type==='循环')return ['18:00','19:00'][index%2];
+  return ['09:00','11:00','15:00','20:00'][index%4]
 }
 function intensityFromText(text){
   if(/崩溃|特别难受|非常难受|压垮|爆炸|受不了/.test(text))return'重';
@@ -231,20 +259,21 @@ function buildChecklist(items){return items.map(title=>({id:genId(),title,done:f
 function buildTaskFromNaturalBlock(block,type,ds,rawText){
   const title=cleanTaskTitle(block.title||block)||'未命名任务';
   const checklistItems=[...new Set((block.checklist||[]).map(cleanTaskTitle).filter(Boolean))];
+  const parsedTime=detectTimeFromText(String(block.title||'')+' '+String(rawText||''));
   if(type==='项目'){
-    return{id:genId(),type,title,steps:(checklistItems.length?checklistItems:[title]).map(x=>({id:genId(),title:x,duration:30,done:false})),reminderTime:'22:30',isTiming:false,startTime:null,scheduledStart:null,scheduledEnd:null,timeLabel:null,scheduledDate:block.scope==='single'?ds:null,alarmTime:null,rawText}
+    return{id:genId(),type,title,steps:(checklistItems.length?checklistItems:[title]).map(x=>({id:genId(),title:x,duration:30,done:false})),reminderTime:'22:30',isTiming:false,startTime:null,scheduledStart:parsedTime?.value||null,scheduledEnd:null,timeLabel:parsedTime?.label||null,scheduledDate:block.scope==='single'?ds:null,alarmTime:null,rawText}
   }
   if(type==='每日'){
-    return{id:genId(),type,title,frequency:'每天',subtask:checklistItems[0]||'',checklist:buildChecklist(checklistItems),completedToday:false,lastCompletedDate:null,startDate:ds,scheduledStart:null,scheduledEnd:null,timeLabel:null,alarmTime:null,rawText}
+    return{id:genId(),type,title,frequency:'每天',subtask:checklistItems[0]||'',checklist:buildChecklist(checklistItems),completedToday:false,lastCompletedDate:null,startDate:ds,scheduledStart:parsedTime?.value||null,scheduledEnd:null,timeLabel:parsedTime?.label||null,alarmTime:null,rawText}
   }
   if(type==='循环'){
     const cycleMatch=String(rawText||'').match(/每\s*([0-9]+)\s*天|每([一二两三四五六七八九十]+)天/);
     const zhMap={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9,十:10};
     const cycleDays=cycleMatch?(Number(cycleMatch[1])||zhMap[cycleMatch[2]]||2):2;
     const base=new Date(ds+'T12:00:00');base.setDate(base.getDate()-cycleDays);
-    return{id:genId(),type,title,cycleDays,lastDoneDate:dateKey(base),checklist:buildChecklist(checklistItems),scheduledStart:null,scheduledEnd:null,timeLabel:null,startDate:ds,alarmTime:null,rawText}
+    return{id:genId(),type,title,cycleDays,lastDoneDate:dateKey(base),checklist:buildChecklist(checklistItems),scheduledStart:parsedTime?.value||null,scheduledEnd:null,timeLabel:parsedTime?.label||null,startDate:ds,alarmTime:null,rawText}
   }
-  return{id:genId(),type:'临时',title,scheduledDate:ds,deadline:null,deadlineConfirmed:false,confirmInDays:3,confirmDate:daysLater(3),hiddenToday:false,priority:2,duration:null,completed:false,completedAt:null,checklist:buildChecklist(checklistItems),scheduledStart:null,scheduledEnd:null,timeLabel:null,alarmTime:null,important:false,rawText}
+  return{id:genId(),type:'临时',title,scheduledDate:ds,deadline:null,deadlineConfirmed:false,confirmInDays:3,confirmDate:daysLater(3),hiddenToday:false,priority:2,duration:null,completed:false,completedAt:null,checklist:buildChecklist(checklistItems),scheduledStart:parsedTime?.value||null,scheduledEnd:null,timeLabel:parsedTime?.label||null,alarmTime:parsedTime?.value||null,important:!!parsedTime,rawText}
 }
 function parseNaturalTaskInput(text,fixedType){
   const source=String(text||'').trim();if(!source)return null;
@@ -433,7 +462,7 @@ renderCalendar=function(){
     wdRow.className='weekday-row v2-slot-daytabs';
     wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<button class="wd ${ds===today?'today':''} ${ds===activeDs?'active':''}" onclick="selectCalendarDay('${ds}')">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></button>`}).join('');
     const meta=buildCalendarDayMeta(activeDs);
-    const dayItems=[...meta.items].filter(x=>x.plannedStart||x.alarmTime).sort((a,b)=>(a.plannedStart||a.alarmTime||'99:99').localeCompare(b.plannedStart||b.alarmTime||'99:99'));
+    const dayItems=[...meta.items].map((item,index)=>Object.assign({},item,{_start:inferItemStart(item,index)})).sort((a,b)=>(a._start||'99:99').localeCompare(b._start||'99:99'));
     const startHour=6,endHour=24,rowHeight=24,totalRows=endHour-startHour;
     let timeline=`<div class="v2-day-timeline"><div class="v2-day-timeline-axis">`;
     for(let hour=startHour;hour<endHour;hour++)timeline+=`<div class="v2-day-hour">${String(hour).padStart(2,'0')}:00</div>`;
@@ -442,12 +471,12 @@ renderCalendar=function(){
     timeline+=`</div><button class="v2-day-timeline-surface ${activeDs===today?'today':''}" onclick="selectCalendarDay('${activeDs}')">`;
     if(dayItems.length){
       timeline+=dayItems.map(item=>{
-        const startText=item.plannedStart||item.alarmTime||'09:00';
+        const startText=item._start||'09:00';
         const endText=item.plannedEnd||formatHHMM(Math.min(timeToMinutes(startText)+60,24*60));
         const startMin=Math.max(timeToMinutes(startText),startHour*60),endMin=Math.max(timeToMinutes(endText),startMin+30);
         const top=((startMin-startHour*60)/60)*rowHeight;
         const height=Math.max(((endMin-startMin)/60)*rowHeight,22);
-        const metaLine=`${esc(startText)} - ${esc(endText)}${item.timeLabel?` · ${esc(item.timeLabel)}`:''}`;
+        const metaLine=`${esc(startText)} - ${esc(endText)}${item.timeLabel?` · ${esc(item.timeLabel)}`:''}${(!item.plannedStart&&!item.alarmTime)?' · 自动安排':''}`;
         return `<div class="v2-day-block" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title">${esc(item.title)}</div><div class="v2-day-block-meta">${metaLine}</div></div>`
       }).join('');
     }else{
@@ -495,9 +524,9 @@ renderCalendar=function(){
   const days=getWeekDays(calWeekOffset),m=days[0];
   title.innerHTML=iconImg('提醒',18)+`${m.getFullYear()}.${m.getMonth()+1}`;
   wdRow.className='weekday-row v2-weekdays';
-  wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<div class="wd ${ds===today?'v2-strong-day':''}">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`}).join('');
+  wdRow.innerHTML=days.map((d,i)=>{const ds=dateKey(d);return `<button class="wd ${ds===today?'v2-strong-day':''}" onclick="selectCalendarDay('${ds}')">${weekdays[i]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></button>`}).join('');
   grid.className='v2-week-grid';
-  grid.innerHTML=days.map(d=>{const ds=dateKey(d),meta=buildCalendarDayMeta(ds);return `<button class="v2-week-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-week-top"><span class="v2-week-num">${d.getMonth()+1}.${d.getDate()}</span><span class="v2-week-icons">${renderCalendarDayBadges(meta,'normal')}</span></div><div class="v2-week-body">${renderCalendarTaskSummary(meta,'small')}</div></button>`}).join('');
+  grid.innerHTML=days.map(d=>{const ds=dateKey(d),meta=buildCalendarDayMeta(ds);return `<button class="v2-week-day ${ds===today?'today':''} ${calSelectedDate&&dateKey(calSelectedDate)===ds?'selected':''}" onclick="selectCalendarDay('${ds}')"><div class="v2-week-top"><span class="v2-week-icons">${renderCalendarDayBadges(meta,'normal')}</span></div><div class="v2-week-body">${renderCalendarTaskSummary(meta,'small')}</div></button>`}).join('');
 }
 window.selectCalendarDay=selectCalendarDay;
 
@@ -1198,7 +1227,7 @@ window.v2Boot=function(){
   initRuntimeAppInfo().then(()=>applyRuntimeVersionMigration()).then(changed=>{if(changed)toast(`已切换到新版本 ${versionLabel()}`)});
   setTimeout(()=>checkForAppUpdates(true),1600);
   try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
-  if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');
+  if(source==='empty'&&!hasMeaningfulData())document.getElementById('v2ImportBanner').classList.remove('v2-hidden');else document.getElementById('v2ImportBanner').classList.add('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
   autoGeneratePeriodicReviews();
   syncCloudForm();
