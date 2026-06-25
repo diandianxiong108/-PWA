@@ -364,6 +364,26 @@ function renderCalendarInlinePreview(ds){
   document.getElementById('v2PreviewCompact')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='compact';persist();renderCalendarInlinePreview(ds)});
   document.getElementById('v2PreviewAll')?.addEventListener('click',()=>{appData.v2.calendarPreviewMode='all';persist();renderCalendarInlinePreview(ds)});
 }
+function selectCalendarDay(ds){calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)}
+showDayTasks=function(value){selectCalendarDay(dateKey(value))}
+renderCalendarTimeSlot=function(){
+  const grid=document.getElementById('calGrid'),title=document.getElementById('calTitle'),wdRow=document.getElementById('weekdayRow');
+  const days=getWeekDays(calWeekOffset),today=todayStr();
+  title.innerHTML=iconImg('提醒',18)+`时段 ${days[0].getFullYear()}.${days[0].getMonth()+1}`;
+  wdRow.innerHTML=days.map(d=>`<div class="wd">${WDAY_NAMES[d.getDay()]}<span class="dt">${d.getMonth()+1}.${d.getDate()}</span></div>`).join('');
+  const slots=['上午','下午','晚上'];let html=`<div class="v2-slot-head-grid">`;
+  days.forEach(d=>{const ds=dateKey(d);html+=`<button class="v2-slot-head ${ds===today?'today':''}" onclick="selectCalendarDay('${ds}')">${d.getDate()}</button>`});html+=`</div>`;
+  slots.forEach(slot=>{html+=`<div class="v2-slot-label">${slot}</div><div class="v2-slot-grid">`;days.forEach(d=>{const ds=dateKey(d),items=displayItems(ds).filter(x=>getTimeSlotLabel(x.plannedStart||x.alarmTime||x.timeLabel||'')===slot),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),notes=getDayNotes(ds).length,emotions=getEmotionEntries(ds).length,inspirations=getDayInspirationEntries(ds).length;html+=`<button class="v2-slot-cell ${items.length||holiday||birthdays.length||notes||emotions||inspirations?'active':''}" onclick="selectCalendarDay('${ds}')">${items.slice(0,3).map(x=>`<div class="v2-slot-line"><span class="v2-cal-mini-dot" style="background:${COLOR[x.type]||COLOR.记录}"></span><span>${esc(x.title)}</span></div>`).join('')}${items.length>3?`<div class="v2-slot-more">+${items.length-3}</div>`:''}${holiday?`<div class="v2-slot-tag">${esc(holiday)}</div>`:''}${birthdays.length?`<div class="v2-slot-icons">🎂${notes?'📝':''}${emotions?'💭':''}${inspirations?'💡':''}</div>`:(notes||emotions||inspirations)?`<div class="v2-slot-icons">${emotions?'💭':''}${notes?'📝':''}${inspirations?'💡':''}</div>`:''}</button>`});html+=`</div>`});
+  grid.className='';grid.innerHTML=html;
+}
+renderCalendarYear=function(){
+  const grid=document.getElementById('calGrid'),title=document.getElementById('calTitle'),wdRow=document.getElementById('weekdayRow'),td=document.getElementById('calDayTasks');
+  wdRow.innerHTML='';td.classList.remove('show');const year=new Date().getFullYear()+calWeekOffset;title.innerHTML=iconImg('提醒',18)+`${year}年`;
+  grid.className='';grid.style.display='grid';grid.style.gridTemplateColumns='repeat(3,1fr)';grid.style.gap='8px';grid.style.padding='4px 0';
+  let h='';for(let m=0;m<12;m++){const first=new Date(year,m,1),last=new Date(year,m+1,0),startDay=first.getDay()||7;h+=`<div class="v2-year-card" onclick="calWeekOffset=${calWeekOffset};calIsYear=false;calIsMonth=true;calTimeSlotView=false;var d=new Date();d.setFullYear(${year},${m},1);calWeekOffset=Math.round((d-new Date())/2592000000);renderCalendar()"><div class="v2-year-title">${m+1}月</div><div class="v2-year-week">${['一','二','三','四','五','六','日'].map(n=>`<span>${n}</span>`).join('')}</div><div class="v2-year-days">`;for(let i=1;i<startDay;i++)h+='<span></span>';for(let day=1;day<=last.getDate();day++){const ds=`${year}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,items=displayItems(ds),holiday=getHolidayLabel(ds),birthdays=getBirthdayEntries(ds),marks=(getEmotionEntries(ds).length?'💭':'')+(getDayNotes(ds).length?'📝':'')+(getDayInspirationEntries(ds).length?'💡':'');h+=`<button onclick="event.stopPropagation();selectCalendarDay('${ds}')" class="v2-year-day ${ds===todayStr()?'today':''} ${items.length||holiday||birthdays.length||marks?'active':''}">${day}${holiday?`<span class="v2-year-holiday">${esc(holiday).slice(0,1)}</span>`:''}${birthdays.length?'<span class="v2-year-bday">🎂</span>':''}${items.length?`<span class="v2-year-dot" style="background:${COLOR[items[0].type]||COLOR.记录}"></span>`:''}${marks?`<span class="v2-year-mark">${marks}</span>`:''}</button>`}h+=`</div></div>`}
+  grid.innerHTML=h;
+}
+window.selectCalendarDay=selectCalendarDay;
 
 function injectShell(){
   const app=document.querySelector('.app');
