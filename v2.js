@@ -413,7 +413,11 @@ function renderCalendarDayBadges(meta,size='normal'){
 function renderCalendarTaskSummary(meta,size='normal'){
   if(!meta.items.length)return '<div class="v2-day-empty">·</div>';
   const grouped=meta.items.slice(0,size==='small'?3:6).reduce((acc,item)=>{(acc[item.type||'任务']=acc[item.type||'任务']||[]).push(item);return acc},{});
-  return Object.entries(grouped).map(([type,list])=>`<div class="v2-day-summary-row ${size}"><div class="v2-day-summary-dots">${list.map(item=>`<span class="v2-cal-mini-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span>`).join('')}</div><div class="v2-day-summary-text">${list.map(item=>esc(item.title)).join('、')}</div></div>`).join('');
+  return Object.entries(grouped).map(([type,list])=>{
+    const text=list.map(item=>esc(item.title)).join('、');
+    const level=text.length>18||list.length>=3?'dense':text.length>10||list.length>=2?'compact':'';
+    return `<div class="v2-day-summary-row ${size} ${level}"><div class="v2-day-summary-dots">${list.map(item=>`<span class="v2-cal-mini-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span>`).join('')}</div><div class="v2-day-summary-text">${text}</div></div>`
+  }).join('');
 }
 function selectCalendarDay(ds){calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)}
 showDayTasks=function(value){selectCalendarDay(dateKey(value))}
