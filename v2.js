@@ -1,6 +1,9 @@
 (function(){
 const STORAGE_KEY='task-manager-v2-data';
 const LEGACY_KEY='appCache';
+const APP_VERSION='2026.06.25.3';
+const UPDATE_FEED_URL='https://cdn.jsdelivr.net/gh/diandianxiong108/-PWA@main/version.json';
+const UPDATE_PAGE_URL='https://github.com/diandianxiong108/-PWA/actions/workflows/build-apk.yml';
 const COLOR={每日:'#64b5f6',项目:'#ce93d8',临时:'#ffb74d',循环:'#81c784',记录:'#90a4ae'};
 const HOLIDAYS_2026={
   '2026-01-01':'元旦',
@@ -139,6 +142,7 @@ function saveEmotionLog(entry){
   persist();
   return true
 }
+window.TASK_MANAGER_APP_VERSION=APP_VERSION;
 function getTaskChildren(task){return task?.type==='项目'?(task.steps||[]):(task?.checklist||[])}
 function hasTaskChildren(task){return getTaskChildren(task).length>0}
 function taskChildProgress(task){const items=getTaskChildren(task),done=items.filter(x=>x.done).length;return{done,total:items.length}}
@@ -398,7 +402,7 @@ function injectShell(){
   window.addEventListener('popstate',()=>{if(routeState)closeRouteInternal()});
   document.getElementById('v2ImportBtn').addEventListener('click',()=>document.getElementById('v2ImportInput').click());
   document.getElementById('v2ImportInput').addEventListener('change',importV2);
-  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML='<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder=\"输入 X-Master-Key\" type=\"password\"></label><div class=\"v2-row\" style=\"flex-wrap:wrap\"><button class=\"v2-secondary\" id=\"v2CloudUpload\">上传云端</button><button class=\"v2-secondary\" id=\"v2CloudRestore\">恢复云端</button><button class=\"v2-secondary\" id=\"v2CloudUploadCompress\">上传后压缩本地</button><button class=\"v2-secondary\" id=\"v2CloudCompress\">仅压缩本地旧记录</button></div><div id=\"v2CloudStatus\" class=\"hint\"></div></div></div>';settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm()}
+  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML=`<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-row" style="margin-top:8px"><span class="v2-chip active">版本 ${APP_VERSION}</span><button class="v2-secondary" id="v2CheckUpdateBtn">检查更新</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder="输入 X-Master-Key" type="password"></label><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CloudUpload">上传云端</button><button class="v2-secondary" id="v2CloudRestore">恢复云端</button><button class="v2-secondary" id="v2CloudUploadCompress">上传后压缩本地</button><button class="v2-secondary" id="v2CloudCompress">仅压缩本地旧记录</button></div><div id="v2CloudStatus" class="hint"></div></div></div>`;settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CheckUpdateBtn').addEventListener('click',()=>checkForAppUpdates(false));document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm()}
   buildPlanner();injectRecordsTools();
 }
 
@@ -451,6 +455,63 @@ function applyNaturalCapture(fixedType){
   const result=previewNaturalCapture(fixedType);if(!result)return 0;
   return applyParsedTasks(result,{closeOverlay:true,toastText:'已自动整理到任务里'});
 }
+async function clearRuntimeCaches(){
+  try{if('caches'in window){const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('task-mgr-v2-')).map(k=>caches.delete(k)))} }catch(e){}
+  try{
+    if('serviceWorker'in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(async reg=>{try{await reg.update();reg.waiting?.postMessage('SKIP_WAITING')}catch(e){}}));
+    }
+  }catch(e){}
+}
+function ensureUpdateModal(){
+  let overlay=document.getElementById('v2UpdateOverlay');
+  if(overlay)return overlay;
+  overlay=document.createElement('div');overlay.id='v2UpdateOverlay';overlay.className='chat-overlay';
+  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">发现新版本</div><button class="chat-close" id="v2UpdateClose">✕</button></div><div class="v2-panel" style="margin:0"><div id="v2UpdateBody" class="hint">正在检查更新…</div><div class="v2-row end" style="margin-top:12px"><button class="v2-secondary" id="v2UpdateLater">稍后再说</button><a class="v2-primary" id="v2UpdateGo" href="${UPDATE_PAGE_URL}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">去下载新包</a></div></div></div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('v2UpdateClose').addEventListener('click',()=>overlay.classList.remove('show'));
+  document.getElementById('v2UpdateLater').addEventListener('click',()=>overlay.classList.remove('show'));
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('show')});
+  return overlay
+}
+function compareVersions(a,b){
+  const pa=String(a||'').split(/[^\d]+/).filter(Boolean).map(Number),pb=String(b||'').split(/[^\d]+/).filter(Boolean).map(Number),len=Math.max(pa.length,pb.length);
+  for(let i=0;i<len;i++){const av=pa[i]||0,bv=pb[i]||0;if(av>bv)return 1;if(av<bv)return-1}
+  return 0
+}
+function showUpdatePrompt(remote){
+  const overlay=ensureUpdateModal(),body=document.getElementById('v2UpdateBody'),go=document.getElementById('v2UpdateGo');
+  const notes=(remote.notes||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+  body.innerHTML=`<div class="v2-capture-head"><span>当前 ${APP_VERSION}</span><span>最新 ${esc(remote.version||'未知')}</span></div><p style="margin:0 0 8px">有新版本可以安装。为了避免华为手机继续显示旧页面，这版会在启动时主动清旧缓存。</p>${notes?`<ul style="margin:0;padding-left:18px">${notes}</ul>`:''}`;
+  go.href=remote.downloadUrl||UPDATE_PAGE_URL;
+  overlay.classList.add('show');
+}
+async function applyRuntimeVersionMigration(){
+  const last=localStorage.getItem('tm_app_runtime_version');
+  if(last===APP_VERSION)return false;
+  localStorage.setItem('tm_app_runtime_prev',last||'');
+  localStorage.setItem('tm_app_runtime_version',APP_VERSION);
+  await clearRuntimeCaches();
+  return true
+}
+async function checkForAppUpdates(silent=true){
+  try{
+    const res=await fetch(`${UPDATE_FEED_URL}?t=${Date.now()}`,{cache:'no-store'});
+    if(!res.ok)throw new Error('UPDATE_FETCH_FAILED');
+    const remote=await res.json();
+    if(compareVersions(remote.version,APP_VERSION)>0){
+      localStorage.setItem('tm_update_latest_seen',String(remote.version));
+      showUpdatePrompt(remote);
+      return remote
+    }
+    if(!silent)toast('当前已经是最新版本');
+  }catch(e){
+    if(!silent)toast('暂时没连上更新服务');
+  }
+  return null
+}
+window.checkForTaskManagerUpdates=checkForAppUpdates;
 function beginRoute(title,icon,kind){
   if(routeState)closeRouteInternal(false);homeScroll=window.scrollY;const app=document.querySelector('.app'),page=document.getElementById('v2RoutePage'),body=document.getElementById('v2RouteBody');body.innerHTML='';app.classList.add('v2-hidden');page.classList.add('show');document.getElementById('v2RouteTitle').textContent=title;document.getElementById('v2RouteIcon').innerHTML=iconImg(icon,28);routeState={kind};window.scrollTo(0,0);history.pushState({v2Route:kind},'',`#/${kind}`);return body
 }
@@ -954,6 +1015,8 @@ function captureLegacyActions(){document.addEventListener('click',e=>{const btn=
 
 window.v2Boot=function(){
   patchLegacyHooks();const source=loadIsolatedData();injectShell();installTimePickerHooks();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
+  applyRuntimeVersionMigration().then(changed=>{if(changed)toast(`已切换到新版本 ${APP_VERSION}`)});
+  setTimeout(()=>checkForAppUpdates(true),1600);
   try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
   if(source==='empty')document.getElementById('v2ImportBanner').classList.remove('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');

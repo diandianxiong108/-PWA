@@ -15,6 +15,6 @@ function safeClearDir(dir){
 }
 
 safeClearDir(out);
-for(const name of ['index.html','ai-memory.js','v2.js','v2.css','manifest.json','sw.js','quick-add.html','小猫图标.jpg','小猫图标（2）.jpg','小猫图标（3）.jpg','小猫图标（4）.jpg'])fs.copyFileSync(path.join(root,name),path.join(out,name));
+for(const name of ['index.html','ai-memory.js','v2.js','v2.css','manifest.json','version.json','sw.js','quick-add.html','小猫图标.jpg','小猫图标（2）.jpg','小猫图标（3）.jpg','小猫图标（4）.jpg'])fs.copyFileSync(path.join(root,name),path.join(out,name));
 fs.cpSync(path.join(root,'icons'),path.join(out,'icons'),{recursive:true,force:true});
 console.log('Prepared Capacitor web assets in v2/www');

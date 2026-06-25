@@ -1,5 +1,5 @@
-const CACHE = 'task-mgr-v2-20260621';
-const STATIC_ASSETS = ['./','./index.html','./manifest.json','./icons/icon-192.png','./icons/icon-512.png','./quick-add.html','./v2.css','./ai-memory.js','./v2.js'];
+const CACHE = 'task-mgr-v2-20260625-3';
+const STATIC_ASSETS = ['./','./index.html','./manifest.json','./version.json','./icons/icon-192.png','./icons/icon-512.png','./quick-add.html','./v2.css','./ai-memory.js','./v2.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)));
