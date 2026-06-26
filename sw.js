@@ -1,4 +1,4 @@
-const CACHE = 'task-mgr-v2-20260626-3';
+const CACHE = 'task-mgr-v2-20260626-4';
 const STATIC_ASSETS = ['./','./index.html','./manifest.json','./version.json','./icons/icon-192.png','./icons/icon-512.png','./quick-add.html','./v2.css','./ai-memory.js','./v2.js'];
 
 self.addEventListener('install', e => {

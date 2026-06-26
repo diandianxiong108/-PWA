@@ -356,3 +356,194 @@ body.v2-ready .v2-plan-entry{margin-top:10px}
 }
 .v2-week-day{min-height:148px}
 .v2-week-body,.v2-month-body{min-width:0}
+
+/* ───────────────────────────────────────────────────────────────────────
+   V2 final visual polish
+   Pure presentation layer: no task, AI, storage, calendar or sync logic.
+   The following tokens keep the app soft, readable and stable on tall phones.
+   ─────────────────────────────────────────────────────────────────────── */
+body.v2-ready{
+  --v2-ink:#284332;
+  --v2-muted:#778b7b;
+  --v2-paper:#fffefa;
+  --v2-mint:#edf8ed;
+  --v2-line:#dcebdd;
+  --v2-shadow:0 10px 24px rgba(76,125,88,.10),0 2px 6px rgba(45,82,55,.035);
+  background:
+    radial-gradient(circle at 4% 8%,rgba(255,231,193,.32),transparent 19rem),
+    radial-gradient(circle at 98% 29%,rgba(222,242,224,.7),transparent 22rem),
+    linear-gradient(180deg,#f1f8f1 0,#f7fbf6 35%,#f9fcf8 100%);
+  color:var(--v2-ink);
+  letter-spacing:.01em;
+}
+body.v2-ready .app{padding-left:14px;padding-right:14px}
+body.v2-ready button,body.v2-ready input,body.v2-ready textarea,body.v2-ready select{font-family:inherit}
+body.v2-ready button{transition:transform .16s ease,box-shadow .16s ease,background .16s ease}
+body.v2-ready button:active{transform:scale(.975)}
+
+/* Small status controls become calm pill clusters instead of heavy boxes. */
+body.v2-ready .status-bar{
+  padding:9px 10px;
+  gap:8px;
+  border-radius:22px;
+  background:rgba(255,255,253,.73);
+  border-color:rgba(218,235,219,.84);
+  box-shadow:var(--v2-shadow);
+}
+body.v2-ready .energy-group,body.v2-ready .free-group{gap:7px}
+body.v2-ready .energy-btn{height:43px;border-radius:15px;background:linear-gradient(180deg,#fff,#f9fdf9);color:var(--v2-ink)}
+body.v2-ready .free-btn{height:39px;border-radius:14px;background:rgba(255,255,255,.78);color:var(--v2-muted)}
+body.v2-ready .energy-btn.active,body.v2-ready .free-btn.active{
+  color:#fff;border-color:transparent;
+  background:linear-gradient(135deg,#85ca8b,#6fbd77);
+  box-shadow:0 7px 14px rgba(92,174,102,.25);
+}
+
+/* Shared surfaces: slightly warmer paper, lighter borders and a small playful glow. */
+body.v2-ready .cal-card,body.v2-ready .quick-add,body.v2-ready .section .card,.v2-panel{
+  background:linear-gradient(145deg,rgba(255,255,253,.98),rgba(248,253,248,.98));
+  border:1px solid rgba(220,235,221,.88);
+  box-shadow:var(--v2-shadow);
+}
+body.v2-ready .cal-card{padding:17px 13px 14px;border-radius:26px}
+.v2-panel{border-radius:20px;padding:15px;margin-bottom:12px}
+.v2-panel h3{font-size:15px;color:var(--v2-ink);letter-spacing:.02em}
+.v2-panel .hint{color:var(--v2-muted)}
+body.v2-ready .section-title{color:var(--v2-ink);font-size:16px;padding-left:2px}
+body.v2-ready .section-title::before{content:"✦ ";color:#d99a4e}
+
+/* Inputs have enough contrast to read, while keeping the notebook-like feeling. */
+body.v2-ready input,body.v2-ready select,body.v2-ready textarea{
+  border-color:#d9e9da;
+  background:linear-gradient(180deg,#fffefc,#f8fcf8);
+  color:var(--v2-ink);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.96),0 1px 0 rgba(222,238,222,.34);
+}
+body.v2-ready input::placeholder,body.v2-ready textarea::placeholder{color:#a4b5a5}
+body.v2-ready input:focus,body.v2-ready select:focus,body.v2-ready textarea:focus{
+  border-color:#82c58a;box-shadow:0 0 0 3px rgba(130,197,138,.16)
+}
+.v2-primary,.v2-secondary,.v2-danger{min-height:34px;font-weight:700;letter-spacing:.02em}
+.v2-primary{background:linear-gradient(135deg,#7dc985,#64b871);box-shadow:0 7px 14px rgba(96,178,105,.22)}
+.v2-secondary{background:linear-gradient(180deg,#fbfffb,#edf8ee);border-color:#cce6ce;color:#46794e}
+.v2-danger{background:linear-gradient(180deg,#fff7f8,#fff0f3);color:#c5677a}
+.v2-chip{background:#f4faf4;color:#718673;border:1px solid #e1eee2}
+.v2-chip.active{background:#e4f5e5;color:#397244}
+
+/* Main calendar header and view tabs. */
+body.v2-ready .cal-title{font-size:19px;letter-spacing:.02em;color:var(--v2-ink)}
+body.v2-ready .weekday-row .wd{color:#506957;line-height:1.15}
+body.v2-ready .weekday-row .wd .dt{display:block;margin-top:4px;color:#9aac9c;font-weight:600}
+body.v2-ready .view-tabs{padding:4px;background:#f2f8f2;border:1px solid #e1eee2;border-radius:18px;gap:4px}
+body.v2-ready .view-tab{height:34px;min-width:0;flex:1;border-radius:13px;background:transparent;color:#78917c}
+body.v2-ready .view-tab.active{background:#fff;color:#3c7846;box-shadow:0 3px 8px rgba(76,129,84,.12)}
+body.v2-ready .cal-footer{margin-top:9px}
+
+/* Week: seven neat little columns, readable horizontal chips, no stretched slabs. */
+.v2-weekdays{gap:3px!important;padding:0 1px}
+.v2-weekdays .wd{min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:center;font-size:12px!important;padding:6px 0!important}
+.v2-week-grid{gap:4px;padding:1px}
+.v2-week-day{
+  min-height:136px;
+  padding:6px 3px 5px;
+  border-radius:16px;
+  background:rgba(255,255,255,.86);
+  border:1px solid rgba(231,240,231,.92);
+  box-shadow:0 4px 10px rgba(57,94,66,.045);
+}
+.v2-week-day.today,.v2-month-day.today{outline:2px solid #83c98b;outline-offset:0;background:linear-gradient(180deg,#f4fdf4,#eaf8eb)}
+.v2-week-day.selected,.v2-month-day.selected{background:linear-gradient(180deg,#effaf0,#e4f4e6)}
+.v2-week-top{min-height:17px;margin-bottom:3px;justify-content:center}
+.v2-week-icons,.v2-month-icons{max-width:100%;justify-content:center;gap:1px}
+.v2-day-badge{font-size:10px}.v2-day-badge.small{font-size:8px}
+.v2-day-summary-chip{
+  justify-content:center;gap:2px;padding:3px 2px;margin:0 0 3px;
+  border-radius:9px;background:rgba(255,255,255,.82);
+}
+.v2-day-summary-chip.small{padding:3px 2px;margin-bottom:3px}
+.v2-day-summary-chip-icon{display:none}
+.v2-day-summary-chip-dot{width:6px;height:6px;flex-basis:6px}
+.v2-day-summary-chip-text{font-size:9px!important;line-height:1.22;white-space:normal;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.v2-day-summary-more{font-size:9px;text-align:center;padding:1px 0;color:#8fa18f}
+.v2-day-empty{text-align:center;font-size:11px;padding:11px 0;color:#d1ddd1}
+
+/* Month: compact enough to sit above the fold, while using the full card width. */
+.v2-month-weekdays{gap:2px!important;margin:1px 0 3px!important}
+.v2-month-weekdays .wd{text-align:center;font-size:11px!important;padding:4px 0!important;color:#5e7864}
+.v2-month-grid{gap:3px}
+.v2-month-day{min-height:63px;padding:4px 2px;border-radius:13px;border:1px solid rgba(234,242,234,.85);box-shadow:none}
+.v2-month-top{min-height:14px;margin-bottom:2px;padding:0 2px;justify-content:center}
+.v2-month-num{font-size:11px;color:#3d5943}
+.v2-month-body .v2-day-summary-chip{padding:2px 1px;margin-bottom:2px;border-radius:7px}
+.v2-month-body .v2-day-summary-chip-text{font-size:8px!important;-webkit-line-clamp:2}
+.v2-month-body .v2-day-summary-chip-dot{width:5px;height:5px;flex-basis:5px}
+.v2-month-body .v2-day-empty{padding:6px 0;font-size:10px}
+
+/* Year remains dense but gains a clear, airy mini-calendar rhythm. */
+.v2-year-grid{gap:7px!important;padding:1px!important}
+.v2-year-card{border:1px solid #e7f0e7;border-radius:14px;padding:6px 5px 5px;background:rgba(255,255,255,.82);box-shadow:0 4px 10px rgba(58,94,66,.04)}
+.v2-year-title{color:#3d6446;font-size:11px;margin-bottom:5px}
+.v2-year-week{font-size:5.5px;color:#a5b4a6;margin-bottom:3px}
+.v2-year-day{font-size:8px;padding:2px 0;border-radius:5px}
+.v2-year-day.active{background:#f0f9f0}.v2-year-day.today{background:#dff3e1}
+
+/* Timeline: distinct hourly rails and soft blocks; still intentionally light on DOM weight. */
+.v2-slot-daytabs{gap:3px!important}.v2-slot-daytabs .wd{font-size:11px!important;padding:6px 0!important;min-width:0}
+.v2-slot-daytabs .wd .dt{font-size:9px;margin-top:3px}
+.v2-slot-daywrap{gap:10px}
+.v2-slot-dayhead{padding:7px 10px;border-radius:14px;background:#f2f9f2;color:#718773;font-size:11px;line-height:1.45}
+.v2-slot-dayhead strong{font-size:13px;color:#3a6744}
+.v2-day-sideinfo span{background:#fffefb;border:1px solid #e2eee3;padding:4px 8px;box-shadow:0 2px 5px rgba(69,104,75,.035)}
+.v2-day-timeline{grid-template-columns:48px 1fr;gap:7px}
+.v2-day-timeline-axis{grid-template-rows:repeat(18,22px)}
+.v2-day-hour{line-height:22px;font-size:10px;color:#98aa9a;padding-right:3px}
+.v2-day-timeline-main{min-height:396px;border-radius:18px;background:linear-gradient(90deg,#fffefc,#fbfefb);border:1px solid #e3efe3;box-shadow:0 6px 16px rgba(73,111,81,.06)}
+.v2-day-gridlines{grid-template-rows:repeat(18,22px)}
+.v2-day-gridline{border-top:1px dashed rgba(137,166,141,.22)}
+.v2-day-gridline:nth-child(3n+1){border-top-style:solid;border-top-color:rgba(103,163,112,.32)}
+.v2-day-timeline-surface{min-height:396px}
+.v2-day-block{left:8px;right:9px;border-left-width:4px;border-radius:12px;padding:4px 7px;box-shadow:0 3px 8px rgba(53,86,61,.09)}
+.v2-day-block-title{font-size:12px;gap:4px}.v2-day-block-meta{font-size:8px}.v2-day-block .v2-task-emoji{font-size:13px}
+
+/* Home action strip and module entrance cards. */
+body.v2-ready .quick-add{padding:11px 12px 12px;border-radius:22px}
+body.v2-ready .quick-add input[type="text"]{font-size:15px;padding:12px 13px}
+body.v2-ready .type-group{gap:5px}.v2-launchers{gap:10px;margin-top:14px!important}
+body.v2-ready .v2-launcher{min-height:106px;border-radius:22px;padding:10px 4px 9px;gap:6px;box-shadow:0 9px 19px rgba(79,121,88,.09),0 1px 3px rgba(0,0,0,.035)}
+.v2-launcher-icon{width:52px;height:52px;border-radius:19px;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 14px rgba(74,106,80,.07)}
+.v2-launcher span:last-child{font-size:11px;color:#395540}
+.v2-launcher::before{filter:saturate(.9)}
+.v2-plan-entry{border-radius:16px;background:linear-gradient(135deg,#f0fbf1,#e1f4e3);box-shadow:0 5px 13px rgba(102,177,112,.12)}
+
+/* Route pages, sheets, daily cards, and chat all share one friendly hierarchy. */
+.v2-route-page{background:linear-gradient(180deg,#f5faf4,#f9fcf8 45%,#f1f8f1)}
+.v2-route-head{background:rgba(247,252,246,.84);border-bottom-color:#e1ede2}
+.v2-route-back{box-shadow:0 4px 10px rgba(70,109,77,.08);color:#4a8153}.v2-route-icon{background:#fff;box-shadow:0 4px 10px rgba(70,109,77,.07)}
+.v2-route-title{font-size:19px;color:var(--v2-ink)}
+.v2-sheet{background:linear-gradient(180deg,#f5fbf4,#eef7ee);border-radius:28px 28px 0 0;box-shadow:0 -12px 30px rgba(41,72,48,.16)}
+.v2-day-summary span{border:1px solid #e2eee2;border-radius:999px;background:#fffefa;color:#6d826f}
+.v2-day-item{border-radius:17px;border:1px solid #e4eee4;border-left:4px solid var(--green);box-shadow:0 6px 14px rgba(54,91,62,.055);padding:11px}
+.v2-day-title{color:var(--v2-ink)}.v2-day-meta{color:#829483}
+.v2-log-card{border-radius:14px;border-color:#e2eee3;background:linear-gradient(180deg,#fff,#fbfefb);box-shadow:0 4px 10px rgba(58,94,66,.04)}
+body.v2-ready .chat-dialog{border-radius:30px 30px 0 0;overflow:hidden}
+body.v2-ready .chat-header{background:linear-gradient(135deg,#fffefb,#eef8ef)}
+body.v2-ready .chat-messages{background:radial-gradient(circle at top right,rgba(255,223,230,.24),transparent 34%),radial-gradient(circle at left bottom,rgba(213,240,215,.33),transparent 30%),#f8fcf8}
+
+/* State sensing page: clearer groupings without turning it into a medical dashboard. */
+.v2-rhythm-home{border-color:#eadfe8;background:radial-gradient(circle at 95% 0,rgba(255,219,231,.5),transparent 30%),radial-gradient(circle at 0 100%,rgba(215,240,218,.65),transparent 34%),linear-gradient(150deg,#fffefd,#fbfffb)}
+.v2-rhythm-home h3{font-size:17px}.v2-rhythm-overview-grid{gap:8px}
+.v2-rhythm-overview-item{border-radius:17px;padding:11px;background:rgba(255,255,255,.76);box-shadow:0 4px 10px rgba(70,103,76,.04)}
+.v2-rhythm-overview-item b{color:#7d9180}.v2-rhythm-overview-item span{color:#405e47}
+.v2-rhythm-card{border-radius:19px!important}.v2-rhythm-card summary{padding:14px 15px}.v2-rhythm-card summary h3{font-size:14px;color:var(--v2-ink)}
+.v2-rhythm-pill,.v2-rhythm-chip{border-radius:14px;box-shadow:0 2px 5px rgba(65,104,73,.035)}
+.v2-rhythm-emergency{border:1px solid #ffe1b6;border-radius:17px;background:linear-gradient(135deg,#fff9ef,#fffefb)}
+
+/* Narrow-phone guard: preserve seven columns and readable buttons without sideways overflow. */
+@media (max-width:390px){
+  body.v2-ready .app{padding-left:10px;padding-right:10px}
+  body.v2-ready .cal-card{padding-left:10px;padding-right:10px}
+  .v2-week-grid{gap:3px}.v2-week-day{min-height:128px;padding-left:2px;padding-right:2px}
+  .v2-weekdays .wd{font-size:11px!important}.v2-day-summary-chip-text{font-size:8px!important}
+  .v2-month-day{min-height:60px}.v2-month-body .v2-day-summary-chip-text{font-size:7.4px!important}
+  .v2-launchers{gap:8px}.v2-launcher-icon{width:48px;height:48px}.v2-launcher span:last-child{font-size:10px}
+}
