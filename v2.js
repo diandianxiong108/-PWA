@@ -252,6 +252,7 @@ function createLifeRhythmEntry(date=todayStr()){
     wakeState:'',
     sleepNote:'',
     energyLevel:'',
+    energyManual:false,
     bodyState:'',
     fatigueScore:'',
     discomfortTags:[],
@@ -969,7 +970,8 @@ function deriveLifeRhythmOverview(entry,ds=todayStr()){
     (['低落','焦虑','烦躁','混乱'].includes(entry.moodState)?2:0)+
     ((entry.rhythmFactors||[]).length>=3?2:(entry.rhythmFactors||[]).length>=1?1:0)+
     ((entry.hiddenCosts||[]).length>=3?2:(entry.hiddenCosts||[]).length>=1?1:0);
-  const inferredEnergy=entry.energyLevel||(negativeScore>=6?'低电量':negativeScore>=3?'中等电量':'高电量');
+  const suggestedEnergy=negativeScore>=6?'低电量':negativeScore>=3?'中等电量':'高电量';
+  const inferredEnergy=(entry.energyManual&&entry.energyLevel)?entry.energyLevel:(entry.energyLevel||suggestedEnergy);
   const inferredRhythm=entry.rhythm||((entry.rhythmFactors||[]).length>=4?'被打乱':(entry.rhythmFactors||[]).length>=2?'很乱':completionPercent>=70?'很顺':'一般');
   const factors=collectLifeRhythmFactors(entry).slice(0,4);
   const completionLabel=completionPercent>=75?'高':completionPercent>=40?'中':'低';
@@ -977,7 +979,16 @@ function deriveLifeRhythmOverview(entry,ds=todayStr()){
   const aiNote=lowEnergy
     ?`今天更适合先恢复再推进。主要卡点是${factors.slice(0,2).join('、')||'状态偏低'}，明天建议先安排边界清楚的小任务。`
     :`今天整体还能推进，主要受${factors.slice(0,2).join('、')||'节奏稳定'}影响，明天可以保留 1 项深度任务。`;
-  return{energyLabel:inferredEnergy,rhythmLabel:inferredRhythm,completionPercent,completionLabel,factors,lowEnergy,aiNote}
+  return{energyLabel:inferredEnergy,suggestedEnergy,rhythmLabel:inferredRhythm,completionPercent,completionLabel,factors,lowEnergy,aiNote,isManualEnergy:!!(entry.energyManual&&entry.energyLevel)}
+}
+function renderEnergyManualControls(entry,overview){
+  return `<div class="v2-rhythm-energy-manual">
+    <div class="v2-rhythm-energy-head">
+      <b>电量状态</b>
+      <span class="v2-rhythm-energy-hint ${overview.isManualEnergy?'manual':''}">${esc(overview.isManualEnergy?'当前按你的手动选择显示':'系统已自动判断，你也可以手动改')}</span>
+    </div>
+    <div class="v2-rhythm-scale">${['低电量','中等电量','高电量'].map(x=>`<button class="v2-rhythm-pill ${overview.energyLabel===x?'active':''}" data-rhythm-energy="${x}">${x}</button>`).join('')}</div>
+  </div>`
 }
 function rhythmSummaryText(entry,key){
   if(key==='sleep')return entry.sleepStart&&entry.wakeTime?`${entry.sleepStart}-${entry.wakeTime}${sleepDurationText(entry.sleepStart,entry.wakeTime)?` · ${sleepDurationText(entry.sleepStart,entry.wakeTime)}`:''}`:'还没记睡眠';
@@ -994,22 +1005,24 @@ function renderLifeRhythmSection(){
     <div class="v2-panel v2-rhythm-home">
       <div class="v2-rhythm-hero">
         <div>
-          <h3>🔋 生活能量与节奏</h3>
-          <p class="hint">记录今天为什么累、为什么乱、为什么顺，让 AI 后面更懂你。</p>
+          <h3>🦋 生活能量与节奏</h3>
+          <p class="hint">记录今天为什么累、为什么乱、为什么顺，让 AI 后面更懂你，也更会照顾你。</p>
         </div>
         <span class="v2-rhythm-badge ${overview.lowEnergy?'low':'normal'}">${esc(overview.energyLabel||'未记录')}</span>
       </div>
       <div class="v2-rhythm-overview-grid">
-        <div class="v2-rhythm-overview-item"><b>今日电量</b><span>${esc(overview.energyLabel||'未记录')}</span></div>
-        <div class="v2-rhythm-overview-item"><b>今日节奏</b><span>${esc(overview.rhythmLabel||'未记录')}</span></div>
-        <div class="v2-rhythm-overview-item"><b>任务完成度</b><span>${overview.completionPercent}%</span></div>
-        <div class="v2-rhythm-overview-item"><b>主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>🔋 今日电量</b><span>${esc(overview.energyLabel||'未记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>🧭 今日节奏</b><span>${esc(overview.rhythmLabel||'未记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>✅ 任务完成度</b><span>${overview.completionPercent}%</span></div>
+        <div class="v2-rhythm-overview-item"><b>☁️ 主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
       </div>
+      ${renderEnergyManualControls(entry,overview)}
       <div class="v2-rhythm-tags">${overview.factors.length?overview.factors.map(x=>`<span class="v2-chip">${esc(x)}</span>`).join(''):'<span class="v2-chip">先点“快速记录今天”开始</span>'}</div>
       ${overview.lowEnergy?`<div class="v2-rhythm-emergency"><strong>🛟 低电量提醒</strong><div class="v2-rhythm-mini">${emergency.short.slice(0,3).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`:''}
       <div class="v2-row end" style="margin-top:10px"><button class="v2-primary" id="v2RhythmQuickFill">快速记录今天</button></div>
     </div>`;
   document.getElementById('v2RhythmQuickFill')?.addEventListener('click',()=>openRhythmQuickRecord(date));
+  box.querySelectorAll('[data-rhythm-energy]').forEach(btn=>btn.addEventListener('click',()=>setLifeRhythmEnergy(date,btn.dataset.rhythmEnergy)));
 }
 function renderLifeRhythmRoute(){
   const target=routeState?.kind==='rhythm'?document.getElementById('v2RouteBody'):document.getElementById('rhythmList');
@@ -1020,16 +1033,17 @@ function renderLifeRhythmRoute(){
       <div class="v2-rhythm-hero">
         <div>
           <h3>🔋 今日状态总览</h3>
-          <p class="hint">上面是结果，下面这些卡片记录的是原因。</p>
+          <p class="hint">上面是今天的结果，下面这些卡片记录的是原因。记得越顺手，AI 之后越懂你。</p>
         </div>
         <span class="v2-rhythm-badge ${overview.lowEnergy?'low':'normal'}">${esc(overview.energyLabel)}</span>
       </div>
       <div class="v2-rhythm-overview-grid">
-        <div class="v2-rhythm-overview-item"><b>今日电量</b><span>${esc(overview.energyLabel)}</span></div>
-        <div class="v2-rhythm-overview-item"><b>今日节奏</b><span>${esc(overview.rhythmLabel)}</span></div>
-        <div class="v2-rhythm-overview-item"><b>任务完成度</b><span>${overview.completionPercent}%</span></div>
-        <div class="v2-rhythm-overview-item"><b>主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>🔋 今日电量</b><span>${esc(overview.energyLabel)}</span></div>
+        <div class="v2-rhythm-overview-item"><b>🧭 今日节奏</b><span>${esc(overview.rhythmLabel)}</span></div>
+        <div class="v2-rhythm-overview-item"><b>✅ 任务完成度</b><span>${overview.completionPercent}%</span></div>
+        <div class="v2-rhythm-overview-item"><b>☁️ 主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
       </div>
+      ${renderEnergyManualControls(entry,overview)}
       <div class="v2-rhythm-ai-note">${esc(overview.aiNote)}</div>
       <div class="v2-row end" style="margin-top:10px"><button class="v2-primary" id="v2RhythmQuickFlow">快速记录今天</button></div>
     </div>
@@ -1092,13 +1106,22 @@ function renderLifeRhythmRoute(){
 }
 function bindLifeRhythmInteractions(date){
   document.getElementById('v2RhythmQuickFlow')?.addEventListener('click',()=>openRhythmQuickRecord(date));
+  document.getElementById('v2RhythmQuickFill')?.addEventListener('click',()=>openRhythmQuickRecord(date));
   document.getElementById('v2RhythmCompletionPercent')?.addEventListener('input',e=>{const out=document.getElementById('v2RhythmCompletionOutput');if(out)out.textContent=e.target.value});
+  document.querySelectorAll('[data-rhythm-energy]').forEach(btn=>btn.addEventListener('click',()=>setLifeRhythmEnergy(date,btn.dataset.rhythmEnergy)));
   document.querySelectorAll('[data-rhythm-field]').forEach(btn=>btn.addEventListener('click',()=>{const e=collectLifeRhythmDraftFromForm(date);e[btn.dataset.rhythmField]=btn.dataset.value;saveLifeRhythmEntry(e);renderLifeRhythmRoute();renderLifeRhythmSection()}));
   document.querySelectorAll('[data-rhythm-toggle]').forEach(btn=>btn.addEventListener('click',()=>toggleLifeRhythmTag(date,btn.dataset.rhythmToggle,btn.dataset.value)));
   document.querySelectorAll('[data-hidden-remove]').forEach(btn=>btn.addEventListener('click',()=>removeHiddenCost(date,btn.dataset.hiddenRemove)));
   document.querySelectorAll('[data-rhythm-save]').forEach(btn=>btn.addEventListener('click',()=>saveLifeRhythmFromForm(date,btn.dataset.rhythmSave)));
   document.getElementById('v2RhythmParse')?.addEventListener('click',()=>applyLifeRhythmText(date));
   document.getElementById('v2RhythmSaveAll')?.addEventListener('click',()=>saveLifeRhythmFromForm(date,'all'));
+}
+function setLifeRhythmEnergy(date,value){
+  const entry=collectLifeRhythmDraftFromForm(date);
+  entry.energyLevel=value;
+  entry.energyManual=true;
+  saveLifeRhythmEntry(entry);
+  renderLifeRhythmRoute();renderLifeRhythmSection();toast('已按你的感觉更新今日电量')
 }
 function toggleLifeRhythmTag(date,key,value){
   const entry=collectLifeRhythmDraftFromForm(date);
@@ -1180,7 +1203,11 @@ function openRhythmQuickRecord(date=todayStr()){
 function saveRhythmQuickRecord(date=todayStr()){
   const entry=getLifeRhythmEntry(date,true);
   const active=(key)=>[...document.querySelectorAll(`#v2RhythmQuickBody [data-rhythm-toggle="${key}"].active`)].map(x=>x.dataset.value);
-  entry.energyLevel=active('quickEnergy')[0]||entry.energyLevel;
+  const selectedEnergy=active('quickEnergy')[0];
+  if(selectedEnergy){
+    entry.energyLevel=selectedEnergy;
+    entry.energyManual=true;
+  }
   entry.moodState=active('quickMood')[0]||entry.moodState;
   entry.rhythm=active('quickRhythm')[0]||entry.rhythm;
   entry.completionPercent=document.getElementById('v2QuickCompletion')?.value||entry.completionPercent;
