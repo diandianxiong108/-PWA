@@ -217,6 +217,8 @@ const TASK_ICON_RULES=[
   [/思维|复习|阅读|看书|论文|科研|学习|写作|PPT|作业/,'📖'],
   [/小红书|拍照|剪辑|发帖|账号|内容/,'📱'],
   [/电脑|代码|项目|主包|软件|文档|表格|材料/,'💻'],
+  [/文创|分装|打包|封箱|贴单|整理货/,'📦'],
+  [/行李|证件|出发|车票|机票|收拾/,'🧳'],
   [/奶茶|咖啡|喝水|热饮/,'🧋'],
   [/运动|跑步|锻炼|瑜伽|健身/,'🏃'],
   [/家务|整理|收纳|吸尘|拖地|洗衣|打扫/,'🧹'],
@@ -237,6 +239,20 @@ function taskEmoji(item){
   if(item?.type==='循环')return'🔁';
   if(item?.type==='临时')return'📝';
   return'✨'
+}
+function taskTone(item){
+  const text=`${item?.title||''} ${item?.type||''}`;
+  if(/英语|单词|听力|口语|背词|学习|复习|阅读|论文|科研|思维/.test(text))return'study';
+  if(/运动|跑步|锻炼|瑜伽|健身|散步/.test(text))return'move';
+  if(/小红书|剪辑|发帖|内容|拍照|账号/.test(text))return'create';
+  if(/电脑|代码|项目|主包|文档|表格|材料|PPT|软件|文创|分装/.test(text))return'work';
+  if(/家务|整理|收纳|吸尘|拖地|洗衣|打扫/.test(text))return'home';
+  if(/吃饭|午饭|晚饭|早餐|休息|午休|恢复|奶茶|咖啡/.test(text))return'life';
+  if(/出门|快递|通勤|打车|跑腿|行李|证件/.test(text))return'errand';
+  if(item?.type==='循环')return'home';
+  if(item?.type==='临时')return'life';
+  if(item?.type==='项目')return'work';
+  return'study'
 }
 function timeSlotEmoji(slot){
   return slot==='上午'?'🌤️':slot==='中午'?'🍱':slot==='下午'?'🧋':slot==='晚上'?'🌙':'🫧'
@@ -631,10 +647,11 @@ function briefTaskTitle(title,maxLen=4){
 }
 function renderCalendarTaskSummary(meta,size='normal'){
   if(!meta.items.length)return '<div class="v2-day-empty">·</div>';
-  const items=meta.items.slice(0,size==='small'?2:2);
+  const items=meta.items.slice(0,size==='small'?2:3);
   return items.map(item=>{
-    const short=briefTaskTitle(item.title,size==='small'?4:5);
-    return `<div class="v2-day-summary-chip ${size}" style="border-color:${COLOR[item.type]||COLOR.记录}33"><span class="v2-day-summary-chip-icon">${taskEmoji(item)}</span><span class="v2-day-summary-chip-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span class="v2-day-summary-chip-text">${esc(short)}</span></div>`
+    const short=briefTaskTitle(item.title,size==='small'?6:8);
+    const tone=taskTone(item);
+    return `<div class="v2-day-summary-chip ${size} ${tone}" title="${esc(item.title)}"><span class="v2-day-summary-chip-icon">${taskEmoji(item)}</span><span class="v2-day-summary-chip-dot" style="background:${COLOR[item.type]||COLOR.记录}"></span><span class="v2-day-summary-chip-text">${esc(short)}</span></div>`
   }).join('')+(meta.items.length>items.length?`<div class="v2-day-summary-more">+${meta.items.length-items.length}</div>`:'');
 }
 function selectCalendarDay(ds){calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)}
@@ -666,7 +683,7 @@ renderCalendar=function(){
         const top=((startMin-startHour*60)/60)*rowHeight;
         const height=Math.max(((endMin-startMin)/60)*rowHeight,22);
         const metaLine=`${esc(startText)} - ${esc(endText)}`;
-        return `<div class="v2-day-block" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title"><span class="v2-task-emoji">${taskEmoji(item)}</span>${esc(item.title)}</div>${height>=42?`<div class="v2-day-block-meta">${metaLine}</div>`:''}</div>`
+        return `<div class="v2-day-block ${taskTone(item)}" style="top:${top}px;height:${height}px;border-left-color:${COLOR[item.type]||COLOR.记录};background:${COLOR[item.type]||COLOR.记录}18"><div class="v2-day-block-title"><span class="v2-task-emoji">${taskEmoji(item)}</span><span class="v2-day-block-text">${esc(item.title)}</span></div>${height>=42?`<div class="v2-day-block-meta">${metaLine}</div>`:''}</div>`
       }).join('');
     }else{
       timeline+=`<div class="v2-day-block-empty">这一天还没有定时任务，点开后可以添加</div>`;
