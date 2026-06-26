@@ -244,19 +244,35 @@ function timeSlotEmoji(slot){
 function createLifeRhythmEntry(date=todayStr()){
   return{
     date,
+    bedTime:'',
     sleepStart:'',
-    sleepEnd:'',
+    wakeTime:'',
     sleepQuality:'',
+    stayedUpLate:'',
+    wakeState:'',
+    sleepNote:'',
     energyLevel:'',
     bodyState:'',
-    mindState:'',
+    fatigueScore:'',
+    discomfortTags:[],
+    movementType:'',
+    bodyNote:'',
     moodState:'',
+    moodScore:'',
+    moodGoodTags:[],
+    moodBadTags:[],
+    moodNote:'',
     rechargeTags:[],
     rechargeTop:'',
     drainTags:[],
     drainLevel:{},
     rhythm:'',
     control:'',
+    completionLevel:'',
+    completionPercent:'',
+    rhythmFactors:[],
+    stuckTask:'',
+    stuckReasons:[],
     rhythmNote:'',
     interrupts:[],
     primaryInterrupt:'',
@@ -277,13 +293,14 @@ function getLifeRhythmEntry(ds=todayStr(),create=false){
 function summarizeLifeRhythm(entry){
   if(!entry)return'今天还没有记录生活状态';
   const parts=[];
-  if(entry.sleepStart||entry.sleepEnd)parts.push(`睡眠${entry.sleepStart||'--'}→${entry.sleepEnd||'--'}`);
+  if(entry.sleepStart||entry.wakeTime)parts.push(`睡眠${entry.sleepStart||'--'}→${entry.wakeTime||'--'}`);
   if(entry.energyLevel)parts.push(entry.energyLevel);
   if(entry.rhythm)parts.push(`节奏${entry.rhythm}`);
   if(entry.control)parts.push(`掌控感${entry.control}`);
-  if(entry.rechargeTags?.length)parts.push(`补能：${entry.rechargeTags.slice(0,2).join('、')}`);
-  if(entry.drainTags?.length)parts.push(`消耗：${entry.drainTags.slice(0,2).join('、')}`);
-  if(entry.interrupts?.length)parts.push(`打断：${entry.interrupts.slice(0,2).join('、')}`);
+  if(entry.completionLevel||entry.completionPercent)parts.push(`完成度${entry.completionPercent?`${entry.completionPercent}%`:entry.completionLevel}`);
+  if(entry.rechargeTags?.length||entry.moodGoodTags?.length)parts.push(`补能：${(entry.rechargeTags?.length?entry.rechargeTags:entry.moodGoodTags).slice(0,2).join('、')}`);
+  if(entry.drainTags?.length||entry.moodBadTags?.length)parts.push(`消耗：${(entry.drainTags?.length?entry.drainTags:entry.moodBadTags).slice(0,2).join('、')}`);
+  if(entry.rhythmFactors?.length||entry.interrupts?.length)parts.push(`打断：${(entry.rhythmFactors?.length?entry.rhythmFactors:entry.interrupts).slice(0,2).join('、')}`);
   return parts.length?parts.join(' · '):'今天还没有记录生活状态'
 }
 function latestLifeRhythmSummary(limit=5){
@@ -292,39 +309,58 @@ function latestLifeRhythmSummary(limit=5){
 }
 function inferLowEnergy(entry){
   if(!entry)return false;
-  const sleepShort=entry.sleepStart&&entry.sleepEnd?((()=>{let diff=timeToMinutes(entry.sleepEnd)-timeToMinutes(entry.sleepStart);if(diff<=0)diff+=24*60;return diff<6*60})()):false;
-  return entry.energyLevel==='低电量'||entry.control==='低'||entry.rhythm==='完全被打乱'||entry.drainTags?.length>=4||entry.interrupts?.length>=3||entry.sleepQuality==='熬夜'||sleepShort
+  const sleepShort=entry.sleepStart&&entry.wakeTime?((()=>{let diff=timeToMinutes(entry.wakeTime)-timeToMinutes(entry.sleepStart);if(diff<=0)diff+=24*60;return diff<6*60})()):false;
+  return entry.energyLevel==='低电量'||entry.control==='低'||entry.rhythm==='很乱'||entry.rhythm==='完全被打乱'||entry.drainTags?.length>=4||entry.rhythmFactors?.length>=3||entry.sleepQuality==='差'||entry.stayedUpLate==='是'||sleepShort
 }
 function parseLifeRhythmText(text,date=todayStr()){
   const src=String(text||'').trim();if(!src)return null;
   const entry=createLifeRhythmEntry(date);
+  const sleepMatch=src.match(/(?:入睡|睡觉|睡下|睡着)[^\d]*([0-2]?\d)(?:[:点时](\d{1,2}))?/);
+  const wakeMatch=src.match(/(?:起床|醒来|睡到)[^\d]*([0-2]?\d)(?:[:点时](\d{1,2}))?/);
+  const bedMatch=src.match(/(?:上床|躺下)[^\d]*([0-2]?\d)(?:[:点时](\d{1,2}))?/);
+  const toClock=(m)=>m?`${String(Number(m[1]||0)).padStart(2,'0')}:${String(Number(m[2]||0)).padStart(2,'0')}`:'';
+  if(bedMatch)entry.bedTime=toClock(bedMatch);
+  if(sleepMatch)entry.sleepStart=toClock(sleepMatch);
+  if(wakeMatch)entry.wakeTime=toClock(wakeMatch);
   if(/低电量|没电|状态很差|特别累|累死|好累|困死/.test(src))entry.energyLevel='低电量';
   else if(/高电量|状态很好|很有劲|很有精神/.test(src))entry.energyLevel='高电量';
   else if(/还行|一般|中等|普通/.test(src))entry.energyLevel='中等电量';
-  if(/不舒服|头疼|生理期|胃疼|身体不适/.test(src))entry.bodyState='不舒服';
-  else if(/累|疲惫|困/.test(src))entry.bodyState='累';
-  else if(/轻松|舒服/.test(src))entry.bodyState='轻松';
-  if(/专注|进入状态|高效/.test(src))entry.mindState='专注';
-  else if(/涣散|发懵|乱|注意力差/.test(src))entry.mindState='涣散';
-  else if(/一般/.test(src))entry.mindState='一般';
-  if(/开心|有成就感|轻松|心情不错/.test(src))entry.moodState='不错';
-  else if(/难受|低落|委屈|焦虑|烦|烦躁/.test(src))entry.moodState='低落';
-  else if(/平静|正常|一般/.test(src))entry.moodState='平稳';
+  if(/不舒服|头疼|生理期|胃疼|身体不适|姨妈痛/.test(src))entry.bodyState='不舒服';
+  else if(/累|疲惫|困|乏力/.test(src))entry.bodyState='疲惫';
+  else if(/轻松|舒服|状态好/.test(src))entry.bodyState='好';
+  else if(/一般/.test(src))entry.bodyState='一般';
+  if(/开心|有成就感|轻松|心情不错/.test(src))entry.moodState='开心';
+  else if(/平静/.test(src))entry.moodState='平静';
+  else if(/焦虑|紧张/.test(src))entry.moodState='焦虑';
+  else if(/烦|烦躁/.test(src))entry.moodState='烦躁';
+  else if(/低落|委屈|难受/.test(src))entry.moodState='低落';
+  else if(/混乱|乱/.test(src))entry.moodState='混乱';
   const rechargeMap={睡觉:'睡觉',洗澡:'洗澡',散步:'散步',运动:'运动',奶茶:'喝奶茶',咖啡:'喝咖啡',聊天:'聊天',独处:'独处',整理:'整理房间',撸猫:'撸猫',晒太阳:'晒太阳',听歌:'听歌',吃到喜欢的东西:'吃到喜欢的东西',吃了喜欢:'吃到喜欢的东西'};
-  Object.entries(rechargeMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.rechargeTags.includes(v))entry.rechargeTags.push(v)});
+  Object.entries(rechargeMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.rechargeTags.includes(v)){entry.rechargeTags.push(v);if(!entry.moodGoodTags.includes(v))entry.moodGoodTags.push(v)}});
   const drainMap={论文:'论文',PPT:'PPT',咨询:'咨询',学习:'学习',家务:'家务',外出:'外出',沟通:'沟通',临时任务:'临时任务',情绪波动:'情绪波动',跑腿:'跑腿',客户:'咨询'};
-  Object.entries(drainMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.drainTags.includes(v)){entry.drainTags.push(v);entry.drainLevel[v]=/很|特别|好多次|一直/.test(src)?'重':'中'}});
+  Object.entries(drainMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.drainTags.includes(v)){entry.drainTags.push(v);if(!entry.moodBadTags.includes(v))entry.moodBadTags.push(v);entry.drainLevel[v]=/很|特别|好多次|一直/.test(src)?'重':'中'}}); 
   if(/很顺|挺顺|顺利/.test(src))entry.rhythm='很顺';
   else if(/一般/.test(src))entry.rhythm='一般';
-  else if(/有点乱|乱糟糟/.test(src))entry.rhythm='有点乱';
+  else if(/有点卡|卡住/.test(src))entry.rhythm='有点卡';
+  else if(/有点乱|乱糟糟|很乱/.test(src))entry.rhythm='很乱';
   else if(/打乱|被事情推着走|一直被打断/.test(src))entry.rhythm='完全被打乱';
   if(/掌控感高|很有掌控感/.test(src))entry.control='高';
   else if(/掌控感低|没掌控感|被事情推着走/.test(src))entry.control='低';
   else if(src)entry.control='中';
   const interruptMap={电话:'家里电话',消息:'朋友消息',咨询:'客户咨询',快递:'快递',跑腿:'跑腿',刷手机:'刷手机',不舒服:'身体不舒服',临时任务:'临时任务',外卖:'快递'};
-  Object.entries(interruptMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.interrupts.includes(v))entry.interrupts.push(v)});
+  Object.entries(interruptMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.interrupts.includes(v)){entry.interrupts.push(v);if(!entry.rhythmFactors.includes(v))entry.rhythmFactors.push(v)}});
   const hiddenCostMap={寄快递:'寄快递',拿快递:'拿快递',打车:'打车',通勤:'通勤',买东西:'买东西',办杂事:'办杂事',临时外出:'临时外出',排队:'排队',等人:'等人'};
-  Object.entries(hiddenCostMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.hiddenCosts.some(x=>x.title===v))entry.hiddenCosts.push({id:'hc-'+genId(),title:v,duration:/一小时|1小时/.test(src)?'1h+':/半小时|30/.test(src)?'30-60m':'<30m',disrupted:/打乱|耽误/.test(src)?'明显':'有点',costType:/体力|累/.test(src)?'体力':/情绪|烦/.test(src)?'情绪':'时间'})});
+  Object.entries(hiddenCostMap).forEach(([k,v])=>{if(src.includes(k)&&!entry.hiddenCosts.some(x=>x.title===v))entry.hiddenCosts.push({id:'hc-'+genId(),title:v,duration:/一小时|1小时/.test(src)?'1h+':/半小时|30/.test(src)?'30-60m':'<30m',money:'',disrupted:/打乱|耽误/.test(src)?'是':'否',costTypes:[/体力|累/.test(src)?'体力':/情绪|烦/.test(src)?'情绪':'时间'],note:''})});
+  if(/熬夜/.test(src))entry.stayedUpLate='是';
+  if(/没睡好|睡眠差|没睡够/.test(src))entry.sleepQuality='差';
+  else if(/睡得还行|一般/.test(src))entry.sleepQuality='一般';
+  else if(/睡得好|睡得不错|睡够了/.test(src))entry.sleepQuality='好';
+  if(/清醒/.test(src))entry.wakeState='清醒';
+  else if(/很困|困死/.test(src))entry.wakeState='很困';
+  else if(/一般/.test(src))entry.wakeState='一般';
+  if(/完成很多|完成度高|推进不错/.test(src))entry.completionLevel='高';
+  else if(/完成一般|推进一般/.test(src))entry.completionLevel='中';
+  else if(/没推进|完成度低/.test(src))entry.completionLevel='低';
   if(!entry.primaryInterrupt&&entry.interrupts.length)entry.primaryInterrupt=entry.interrupts[0];
   if(!entry.rechargeTop&&entry.rechargeTags.length)entry.rechargeTop=entry.rechargeTags[0];
   entry.note=src.slice(0,180);
@@ -687,7 +723,7 @@ function injectShell(){
   const parking=document.createElement('div');parking.id='v2Parking';parking.hidden=true;document.body.appendChild(parking);
   const planner=document.createElement('main');planner.id='v2Planner';planner.className='v2-module';parking.appendChild(planner);
   const route=document.createElement('main');route.id='v2RoutePage';route.className='v2-route-page';route.innerHTML='<header class="v2-route-head"><button class="v2-route-back" id="v2RouteBack">‹</button><span class="v2-route-icon" id="v2RouteIcon"></span><h1 class="v2-route-title" id="v2RouteTitle"></h1></header><div id="v2RouteBody"></div>';app.after(route);
-  const banner=document.createElement('div');banner.id='v2ImportBanner';banner.className='v2-import-banner v2-hidden';banner.innerHTML='<span>没有读取到原版本地数据。请在原版“设置”中导出 JSON，再导入 V2。</span><button class="v2-secondary" id="v2ImportBtn">导入</button><input id="v2ImportInput" type="file" accept=".json" hidden>';document.body.insertBefore(banner,app);
+  const banner=document.createElement('div');banner.id='v2ImportBanner';banner.className='v2-import-banner v2-hidden';banner.innerHTML='<span>还没有导入原版数据，可在设置里导入 JSON 到 V2。</span><button class="v2-secondary" id="v2ImportBtn">导入 JSON</button><input id="v2ImportInput" type="file" accept=".json" hidden>';parking.appendChild(banner);
   document.body.classList.add('v2-ready');
   buildHomeLaunchers();
   buildQuickCaptureUI();
@@ -695,7 +731,7 @@ function injectShell(){
   window.addEventListener('popstate',()=>{if(routeState)closeRouteInternal()});
   document.getElementById('v2ImportBtn').addEventListener('click',()=>document.getElementById('v2ImportInput').click());
   document.getElementById('v2ImportInput').addEventListener('change',importV2);
-  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML=`<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-row" style="margin-top:8px"><span class="v2-chip active" id="v2VersionChip">版本 ${versionLabel()}</span><button class="v2-secondary" id="v2CheckUpdateBtn">检查更新</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder="输入 X-Master-Key" type="password"></label><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CloudUpload">上传云端</button><button class="v2-secondary" id="v2CloudRestore">恢复云端</button><button class="v2-secondary" id="v2CloudUploadCompress">上传后压缩本地</button><button class="v2-secondary" id="v2CloudCompress">仅压缩本地旧记录</button></div><div id="v2CloudStatus" class="hint"></div></div></div>`;settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CheckUpdateBtn').addEventListener('click',()=>checkForAppUpdates(false));document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm();updateVersionChip()}
+  const settingsActions=document.querySelector('#settingsPopup .form-actions');if(settingsActions){const tools=document.createElement('div');tools.className='v2-tools-stack';tools.style.marginTop='10px';tools.innerHTML=`<div class="v2-row"><button class="v2-secondary" id="v2BackupBtn">导出 V2 完整备份</button><button class="v2-secondary" id="v2ExactAlarmBtn">授权重要闹钟</button></div><div class="v2-row" style="margin-top:8px"><span class="v2-chip active" id="v2VersionChip">版本 ${versionLabel()}</span><button class="v2-secondary" id="v2CheckUpdateBtn">检查更新</button></div><div class="v2-row" style="margin-top:8px"><button class="v2-secondary" id="v2ImportJsonBtn">导入原版 JSON</button></div><div class="v2-panel" id="v2CloudPanel" style="margin-top:10px"><h3>☁ 轻量云端备份</h3><p class="hint">适合你自己一个人用：把完整数据备份到云端，需要填写自己的 JSONBin Bin ID 和 API Key。</p><div class="v2-fields"><label>Bin ID<input id="v2CloudBinId" placeholder="粘贴你的 Bin ID"></label><label>API Key<input id="v2CloudApiKey" placeholder="输入 X-Master-Key" type="password"></label><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CloudUpload">上传云端</button><button class="v2-secondary" id="v2CloudRestore">恢复云端</button><button class="v2-secondary" id="v2CloudUploadCompress">上传后压缩本地</button><button class="v2-secondary" id="v2CloudCompress">仅压缩本地旧记录</button></div><div id="v2CloudStatus" class="hint"></div></div></div>`;settingsActions.parentElement.appendChild(tools);document.getElementById('v2BackupBtn').addEventListener('click',exportV2);document.getElementById('v2ExactAlarmBtn').addEventListener('click',requestExactAlarmPermission);document.getElementById('v2CheckUpdateBtn').addEventListener('click',()=>checkForAppUpdates(false));document.getElementById('v2ImportJsonBtn').addEventListener('click',()=>document.getElementById('v2ImportInput').click());document.getElementById('v2CloudUpload').addEventListener('click',()=>uploadCloudBackup({compressAfter:false}));document.getElementById('v2CloudRestore').addEventListener('click',restoreCloudBackup);document.getElementById('v2CloudUploadCompress').addEventListener('click',()=>uploadCloudBackup({compressAfter:true}));document.getElementById('v2CloudCompress').addEventListener('click',()=>{const result=compressLocalData();render();renderPlanner();renderReviews?.();updateCloudStatus(`已压缩：归档 ${result.archivedDays} 天计划，清理 ${result.removedOcrNotes} 条旧 OCR 记录`)});syncCloudForm();updateVersionChip()}
   buildPlanner();injectRecordsTools();
 }
 
@@ -896,96 +932,265 @@ function closeRouteInternal(restoreScroll=true){if(!routeState)return;const stat
 }
 const RECHARGE_OPTIONS=['睡觉','洗澡','散步','运动','喝奶茶','喝咖啡','吃到喜欢的东西','聊天','独处','整理房间','撸猫','晒太阳','听歌'];
 const DRAIN_OPTIONS=['论文','PPT','咨询','学习','家务','外出','沟通','情绪波动','临时任务','跑腿','被催促','信息太多'];
-const INTERRUPT_OPTIONS=['家里电话','朋友消息','客户咨询','快递','跑腿','临时任务','刷手机','身体不舒服','环境吵','等待回复'];
-const HIDDEN_COST_OPTIONS=['寄快递','拿快递','打车','通勤','买东西','办杂事','临时外出','排队','等人','收拾东西'];
+const INTERRUPT_OPTIONS=['家里电话','朋友消息','客户咨询','快递','跑腿','临时任务','刷手机','身体不舒服','环境吵','等待回复','任务太碎','任务太难'];
+const HIDDEN_COST_OPTIONS=['寄快递','拿快递','打车','通勤','买东西','办事','临时外出','排队','等人','家务','临时沟通'];
+const DISCOMFORT_OPTIONS=['头痛','胃不舒服','姨妈痛','腰酸','肩颈紧张','眼睛累','困','乏力'];
+const MOVEMENT_OPTIONS=['无','散步','拉伸','游泳','运动','出门走动'];
+const MOOD_GOOD_OPTIONS=['奶茶','吃到喜欢的东西','聊天','完成任务','休息','运动','整理房间','撸猫','晒太阳'];
+const MOOD_BAD_OPTIONS=['任务太多','被打断','家里电话','咨询消耗','身体不舒服','计划被打乱','内耗','任务太碎'];
+const RHYTHM_STUCK_OPTIONS=['不知道从哪开始','任务太大','素材不齐','太累','不想做','被打断','需要别人反馈','内耗','担心做不好','任务边界不清','信息太乱'];
+function renderChipOptions(list,key,active=[],tone=''){
+  const ordered=[...list].sort((a,b)=>(active.includes(b)?1:0)-(active.includes(a)?1:0));
+  return `<div class="v2-rhythm-chipset">${ordered.map(name=>`<button class="v2-rhythm-chip ${tone} ${active.includes(name)?'active':''}" data-rhythm-toggle="${key}" data-value="${esc(name)}">${esc(name)}</button>`).join('')}</div>`
+}
+function taskCompletionPercent(ds=todayStr()){
+  const items=displayItems(ds)||[];if(!items.length)return 0;
+  return Math.round((items.filter(x=>x.status==='done').length/items.length)*100)
+}
+function collectLifeRhythmFactors(entry){
+  return [...new Set([
+    entry.sleepQuality==='差'?'睡眠不足':'',
+    entry.stayedUpLate==='是'?'熬夜':'',
+    entry.bodyState==='疲惫'?'身体疲惫':'',
+    entry.bodyState==='不舒服'?'身体不舒服':'',
+    ...((entry.rhythmFactors||[]).slice(0,4)),
+    ...((entry.drainTags||[]).slice(0,3)),
+    ...((entry.moodBadTags||[]).slice(0,3)),
+    ...(entry.hiddenCosts||[]).slice(0,2).map(x=>x.title)
+  ].filter(Boolean))]
+}
+function deriveLifeRhythmOverview(entry,ds=todayStr()){
+  const completionPercent=Number(entry.completionPercent||0)||taskCompletionPercent(ds);
+  const negativeScore=
+    (entry.sleepQuality==='差'?2:entry.sleepQuality==='一般'?1:0)+
+    (entry.stayedUpLate==='是'?2:0)+
+    (entry.bodyState==='疲惫'?2:entry.bodyState==='不舒服'?3:0)+
+    (Number(entry.fatigueScore||0)>=4?2:Number(entry.fatigueScore||0)>=2?1:0)+
+    (['低落','焦虑','烦躁','混乱'].includes(entry.moodState)?2:0)+
+    ((entry.rhythmFactors||[]).length>=3?2:(entry.rhythmFactors||[]).length>=1?1:0)+
+    ((entry.hiddenCosts||[]).length>=3?2:(entry.hiddenCosts||[]).length>=1?1:0);
+  const inferredEnergy=entry.energyLevel||(negativeScore>=6?'低电量':negativeScore>=3?'中等电量':'高电量');
+  const inferredRhythm=entry.rhythm||((entry.rhythmFactors||[]).length>=4?'被打乱':(entry.rhythmFactors||[]).length>=2?'很乱':completionPercent>=70?'很顺':'一般');
+  const factors=collectLifeRhythmFactors(entry).slice(0,4);
+  const completionLabel=completionPercent>=75?'高':completionPercent>=40?'中':'低';
+  const lowEnergy=inferredEnergy==='低电量'||['很乱','被打乱','完全被打乱'].includes(inferredRhythm)||completionPercent<40||entry.moodState==='低落';
+  const aiNote=lowEnergy
+    ?`今天更适合先恢复再推进。主要卡点是${factors.slice(0,2).join('、')||'状态偏低'}，明天建议先安排边界清楚的小任务。`
+    :`今天整体还能推进，主要受${factors.slice(0,2).join('、')||'节奏稳定'}影响，明天可以保留 1 项深度任务。`;
+  return{energyLabel:inferredEnergy,rhythmLabel:inferredRhythm,completionPercent,completionLabel,factors,lowEnergy,aiNote}
+}
+function rhythmSummaryText(entry,key){
+  if(key==='sleep')return entry.sleepStart&&entry.wakeTime?`${entry.sleepStart}-${entry.wakeTime}${sleepDurationText(entry.sleepStart,entry.wakeTime)?` · ${sleepDurationText(entry.sleepStart,entry.wakeTime)}`:''}`:'还没记睡眠';
+  if(key==='body')return [entry.bodyState,entry.fatigueScore?`疲惫${entry.fatigueScore}/5`:'' ,(entry.discomfortTags||[])[0]].filter(Boolean).join(' · ')||'还没记身体状态';
+  if(key==='mood')return [entry.moodState,entry.moodScore?`心情${entry.moodScore}/5`:'' ,(entry.moodGoodTags||[])[0]||''].filter(Boolean).join(' · ')||'还没记心情';
+  if(key==='rhythm'){const ov=deriveLifeRhythmOverview(entry,entry.date);return [ov.rhythmLabel,entry.control?`掌控感${entry.control}`:'',`${ov.completionPercent}%`].filter(Boolean).join(' · ')}
+  if(key==='hidden')return entry.hiddenCosts?.length?`${entry.hiddenCosts.length} 项隐形成本`:'还没记隐形成本';
+  return ''
+}
 function renderLifeRhythmSection(){
   const box=document.getElementById('rhythmList');if(!box)return;
-  const entry=getLifeRhythmEntry(todayStr(),true);
-  const low=inferLowEnergy(entry);
-  const emergency=appData.v2.lifeRhythm.emergencyKit;
+  const date=todayStr(),entry=getLifeRhythmEntry(date,true),overview=deriveLifeRhythmOverview(entry,date),emergency=appData.v2.lifeRhythm.emergencyKit;
   box.innerHTML=`
     <div class="v2-panel v2-rhythm-home">
       <div class="v2-rhythm-hero">
         <div>
           <h3>🔋 生活能量与节奏</h3>
-          <p class="hint">不是打卡，而是让 AI 更懂你今天该怎么安排。</p>
+          <p class="hint">记录今天为什么累、为什么乱、为什么顺，让 AI 后面更懂你。</p>
         </div>
-        <span class="v2-rhythm-badge ${low?'low':'normal'}">${esc(entry.energyLevel||'今天未记录')}</span>
+        <span class="v2-rhythm-badge ${overview.lowEnergy?'low':'normal'}">${esc(overview.energyLabel||'未记录')}</span>
       </div>
-      <div class="v2-rhythm-summary">
-        <span>😴 ${esc(entry.sleepStart&&entry.sleepEnd?`${entry.sleepStart}-${entry.sleepEnd}${sleepDurationText(entry.sleepStart,entry.sleepEnd)?` · ${sleepDurationText(entry.sleepStart,entry.sleepEnd)}`:''}`:'睡眠待记')}</span>
-        <span>${timeSlotEmoji('上午')} ${esc(entry.bodyState||'身体状态待记录')}</span>
-        <span>💭 ${esc(entry.moodState||'心情待记录')}</span>
-        <span>🧭 ${esc(entry.rhythm||'节奏待记录')}</span>
+      <div class="v2-rhythm-overview-grid">
+        <div class="v2-rhythm-overview-item"><b>今日电量</b><span>${esc(overview.energyLabel||'未记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>今日节奏</b><span>${esc(overview.rhythmLabel||'未记录')}</span></div>
+        <div class="v2-rhythm-overview-item"><b>任务完成度</b><span>${overview.completionPercent}%</span></div>
+        <div class="v2-rhythm-overview-item"><b>主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
       </div>
-      <div class="v2-rhythm-tags">${(entry.rechargeTags||[]).slice(0,3).map(x=>`<span class="v2-chip active">补能·${esc(x)}</span>`).join('')}${(entry.drainTags||[]).slice(0,3).map(x=>`<span class="v2-chip">消耗·${esc(x)}</span>`).join('')||'<span class="v2-chip">今天还没写状态</span>'}</div>
-      ${low?`<div class="v2-rhythm-emergency"><strong>低电量应急包</strong><div class="v2-rhythm-mini">${emergency.short.slice(0,3).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`:''}
-      <div class="v2-row end" style="margin-top:10px"><button class="v2-secondary" id="v2RhythmQuickFill">快速记录今天</button></div>
+      <div class="v2-rhythm-tags">${overview.factors.length?overview.factors.map(x=>`<span class="v2-chip">${esc(x)}</span>`).join(''):'<span class="v2-chip">先点“快速记录今天”开始</span>'}</div>
+      ${overview.lowEnergy?`<div class="v2-rhythm-emergency"><strong>🛟 低电量提醒</strong><div class="v2-rhythm-mini">${emergency.short.slice(0,3).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`:''}
+      <div class="v2-row end" style="margin-top:10px"><button class="v2-primary" id="v2RhythmQuickFill">快速记录今天</button></div>
     </div>`;
-  document.getElementById('v2RhythmQuickFill')?.addEventListener('click',()=>openModulePage('rhythmSection'));
+  document.getElementById('v2RhythmQuickFill')?.addEventListener('click',()=>openRhythmQuickRecord(date));
 }
 function renderLifeRhythmRoute(){
   const target=routeState?.kind==='rhythm'?document.getElementById('v2RouteBody'):document.getElementById('rhythmList');
   if(!target)return;
-  const entry=getLifeRhythmEntry(selectedDay||todayStr(),true),date=selectedDay||todayStr();
-  const tagButtons=(list,key,active=[],tone='')=>`<div class="v2-rhythm-chipset">${list.map(name=>`<button class="v2-rhythm-chip ${tone} ${active.includes(name)?'active':''}" data-rhythm-toggle="${key}" data-value="${esc(name)}">${esc(name)}</button>`).join('')}</div>`;
+  const date=selectedDay||todayStr(),entry=getLifeRhythmEntry(date,true),overview=deriveLifeRhythmOverview(entry,date),emergency=appData.v2.lifeRhythm.emergencyKit;
   target.innerHTML=`
-    <div class="v2-panel">
-      <h3>😴 睡眠记录</h3>
-      <div class="v2-grid">
-        <label>入睡时间<input id="v2RhythmSleepStart" type="time" value="${entry.sleepStart||''}"></label>
-        <label>起床时间<input id="v2RhythmSleepEnd" type="time" value="${entry.sleepEnd||''}"></label>
+    <div class="v2-panel v2-rhythm-home">
+      <div class="v2-rhythm-hero">
+        <div>
+          <h3>🔋 今日状态总览</h3>
+          <p class="hint">上面是结果，下面这些卡片记录的是原因。</p>
+        </div>
+        <span class="v2-rhythm-badge ${overview.lowEnergy?'low':'normal'}">${esc(overview.energyLabel)}</span>
       </div>
-      <div class="v2-rhythm-scale" style="margin-top:8px">
-        ${['没睡好','一般','还不错','熬夜'].map(x=>`<button class="v2-rhythm-pill ${entry.sleepQuality===x?'active':''}" data-rhythm-field="sleepQuality" data-value="${x}">${x}</button>`).join('')}
+      <div class="v2-rhythm-overview-grid">
+        <div class="v2-rhythm-overview-item"><b>今日电量</b><span>${esc(overview.energyLabel)}</span></div>
+        <div class="v2-rhythm-overview-item"><b>今日节奏</b><span>${esc(overview.rhythmLabel)}</span></div>
+        <div class="v2-rhythm-overview-item"><b>任务完成度</b><span>${overview.completionPercent}%</span></div>
+        <div class="v2-rhythm-overview-item"><b>主要影响因素</b><span>${esc(overview.factors.join('、')||'今天还没记录')}</span></div>
       </div>
+      <div class="v2-rhythm-ai-note">${esc(overview.aiNote)}</div>
+      <div class="v2-row end" style="margin-top:10px"><button class="v2-primary" id="v2RhythmQuickFlow">快速记录今天</button></div>
     </div>
-    <div class="v2-panel">
-      <h3>🌤️ 今日能量状态</h3>
-      <div class="v2-rhythm-scale">
-        ${['低电量','中等电量','高电量'].map(x=>`<button class="v2-rhythm-pill ${entry.energyLevel===x?'active':''}" data-rhythm-field="energyLevel" data-value="${x}">${x}</button>`).join('')}
-      </div>
+    <details class="v2-panel v2-rhythm-card" open>
+      <summary><div><h3>😴 睡眠记录</h3><p>${esc(rhythmSummaryText(entry,'sleep'))}</p></div><span>展开填写</span></summary>
       <div class="v2-grid">
-        <label>身体状态<select id="v2RhythmBody"><option value="">请选择</option><option ${entry.bodyState==='累'?'selected':''}>累</option><option ${entry.bodyState==='一般'?'selected':''}>一般</option><option ${entry.bodyState==='轻松'?'selected':''}>轻松</option><option ${entry.bodyState==='不舒服'?'selected':''}>不舒服</option></select></label>
-        <label>精神状态<select id="v2RhythmMind"><option value="">请选择</option><option ${entry.mindState==='涣散'?'selected':''}>涣散</option><option ${entry.mindState==='一般'?'selected':''}>一般</option><option ${entry.mindState==='专注'?'selected':''}>专注</option></select></label>
+        <label>上床时间<input id="v2RhythmBedTime" type="time" value="${entry.bedTime||''}"></label>
+        <label>大概入睡<input id="v2RhythmSleepStart" type="time" value="${entry.sleepStart||''}"></label>
+        <label>起床时间<input id="v2RhythmWakeTime" type="time" value="${entry.wakeTime||''}"></label>
+        <label>睡眠时长<input value="${esc(entry.sleepStart&&entry.wakeTime?sleepDurationText(entry.sleepStart,entry.wakeTime):'')}" disabled></label>
       </div>
-      <label style="display:grid;gap:6px;margin-top:8px;font-size:12px;color:var(--text-l)">心情状态<select id="v2RhythmMood"><option value="">请选择</option><option ${entry.moodState==='低落'?'selected':''}>低落</option><option ${entry.moodState==='平稳'?'selected':''}>平稳</option><option ${entry.moodState==='不错'?'selected':''}>不错</option><option ${entry.moodState==='很好'?'selected':''}>很好</option></select></label>
+      <div class="v2-rhythm-scale">${['好','一般','差'].map(x=>`<button class="v2-rhythm-pill ${entry.sleepQuality===x?'active':''}" data-rhythm-field="sleepQuality" data-value="${x}">${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-scale" style="margin-top:8px">${['是','否'].map(x=>`<button class="v2-rhythm-pill ${entry.stayedUpLate===x?'active':''}" data-rhythm-field="stayedUpLate" data-value="${x}">熬夜 ${x}</button>`).join('')}${['清醒','一般','很困'].map(x=>`<button class="v2-rhythm-pill ${entry.wakeState===x?'active':''}" data-rhythm-field="wakeState" data-value="${x}">醒来 ${x}</button>`).join('')}</div>
+      <label class="v2-rhythm-note">备注<textarea id="v2RhythmSleepNote" rows="2" placeholder="比如：夜里醒了两次">${esc(entry.sleepNote||'')}</textarea></label>
+      <div class="v2-row end"><button class="v2-primary" data-rhythm-save="sleep">保存睡眠记录</button></div>
+    </details>
+    <details class="v2-panel v2-rhythm-card">
+      <summary><div><h3>💪 身体状态记录</h3><p>${esc(rhythmSummaryText(entry,'body'))}</p></div><span>展开填写</span></summary>
+      <div class="v2-rhythm-scale">${['好','一般','疲惫','不舒服'].map(x=>`<button class="v2-rhythm-pill ${entry.bodyState===x?'active':''}" data-rhythm-field="bodyState" data-value="${x}">${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-scale" style="margin-top:8px">${[1,2,3,4,5].map(x=>`<button class="v2-rhythm-pill ${Number(entry.fatigueScore||0)===x?'active':''}" data-rhythm-field="fatigueScore" data-value="${x}">疲惫 ${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-field"><b>身体不适</b>${renderChipOptions(DISCOMFORT_OPTIONS,'discomfortTags',entry.discomfortTags||[],'interrupt')}</div>
+      <div class="v2-rhythm-field"><b>今日活动</b>${renderChipOptions(MOVEMENT_OPTIONS,'movementType',entry.movementType?[entry.movementType]:[],'soft')}</div>
+      <label class="v2-rhythm-note">备注<textarea id="v2RhythmBodyNote" rows="2" placeholder="比如：今天眼睛很酸，坐久了肩颈紧">${esc(entry.bodyNote||'')}</textarea></label>
+      <div class="v2-row end"><button class="v2-primary" data-rhythm-save="body">保存身体状态</button></div>
+    </details>
+    <details class="v2-panel v2-rhythm-card">
+      <summary><div><h3>💭 心情状态记录</h3><p>${esc(rhythmSummaryText(entry,'mood'))}</p></div><span>展开填写</span></summary>
+      <div class="v2-rhythm-scale">${['开心','平静','焦虑','烦躁','低落','混乱'].map(x=>`<button class="v2-rhythm-pill ${entry.moodState===x?'active':''}" data-rhythm-field="moodState" data-value="${x}">${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-scale" style="margin-top:8px">${[1,2,3,4,5].map(x=>`<button class="v2-rhythm-pill ${Number(entry.moodScore||0)===x?'active':''}" data-rhythm-field="moodScore" data-value="${x}">心情 ${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-field"><b>让心情变好的事情</b>${renderChipOptions(MOOD_GOOD_OPTIONS,'moodGoodTags',entry.moodGoodTags||[],'soft')}</div>
+      <div class="v2-rhythm-field"><b>让心情变差的事情</b>${renderChipOptions(MOOD_BAD_OPTIONS,'moodBadTags',entry.moodBadTags||[],'drain')}</div>
+      <label class="v2-rhythm-note">备注<textarea id="v2RhythmMoodNote" rows="2" placeholder="比如：完成了一件事后轻松很多">${esc(entry.moodNote||'')}</textarea></label>
+      <div class="v2-row end"><button class="v2-primary" data-rhythm-save="mood">保存心情状态</button></div>
+    </details>
+    <details class="v2-panel v2-rhythm-card">
+      <summary><div><h3>🧭 今日节奏记录</h3><p>${esc(rhythmSummaryText(entry,'rhythm'))}</p></div><span>展开填写</span></summary>
+      <div class="v2-rhythm-scale">${['很顺','一般','有点卡','很乱','被打乱'].map(x=>`<button class="v2-rhythm-pill ${entry.rhythm===x?'active':''}" data-rhythm-field="rhythm" data-value="${x}">${x}</button>`).join('')}</div>
+      <div class="v2-rhythm-scale" style="margin-top:8px">${['高','中','低'].map(x=>`<button class="v2-rhythm-pill ${entry.control===x?'active':''}" data-rhythm-field="control" data-value="${x}">掌控感 ${x}</button>`).join('')}</div>
+      <label class="v2-rhythm-range">今日任务完成度 <output id="v2RhythmCompletionOutput">${esc(entry.completionPercent||overview.completionPercent)}</output>%<input id="v2RhythmCompletionPercent" type="range" min="0" max="100" step="5" value="${esc(entry.completionPercent||overview.completionPercent)}"></label>
+      <div class="v2-rhythm-field"><b>影响节奏的因素</b>${renderChipOptions(INTERRUPT_OPTIONS,'rhythmFactors',entry.rhythmFactors||[],'interrupt')}</div>
+      <label class="v2-rhythm-note">今天最卡的任务<textarea id="v2RhythmStuckTask" rows="2" placeholder="比如：整理主包资料">${esc(entry.stuckTask||'')}</textarea></label>
+      <div class="v2-rhythm-field"><b>卡住原因</b>${renderChipOptions(RHYTHM_STUCK_OPTIONS,'stuckReasons',entry.stuckReasons||[],'drain')}</div>
+      <label class="v2-rhythm-note">补充说明<textarea id="v2RhythmNote" rows="2" placeholder="比如：下午一直被咨询和快递打断">${esc(entry.rhythmNote||'')}</textarea></label>
+      <div class="v2-row end"><button class="v2-primary" data-rhythm-save="rhythm">保存节奏记录</button></div>
+    </details>
+    <details class="v2-panel v2-rhythm-card">
+      <summary><div><h3>👜 隐形成本记录</h3><p>${esc(rhythmSummaryText(entry,'hidden'))}</p></div><span>展开填写</span></summary>
+      <div class="v2-rhythm-field"><b>琐事类型</b>${renderChipOptions(HIDDEN_COST_OPTIONS,'hiddenCostsLibrary',(entry.hiddenCosts||[]).map(x=>x.title),'hidden')}</div>
+      <div class="v2-rhythm-hidden-list">${(entry.hiddenCosts||[]).map(cost=>`<div class="v2-hidden-cost-row" data-cost-id="${esc(cost.id)}"><div class="v2-row between"><strong>${esc(cost.title)}</strong><button class="v2-danger" type="button" data-hidden-remove="${esc(cost.id)}">删</button></div><div class="v2-grid"><label>花费时间<input data-hidden-field="duration" value="${esc(cost.duration||'')}" placeholder="如 30m"></label><label>花费金额<input data-hidden-field="money" value="${esc(cost.money||'')}" placeholder="可不填"></label><label>是否打乱<select data-hidden-field="disrupted"><option ${cost.disrupted==='是'?'selected':''}>是</option><option ${cost.disrupted==='否'?'selected':''}>否</option></select></label></div><div class="v2-rhythm-field"><b>消耗类型</b>${renderChipOptions(['时间','体力','情绪','注意力'],`hiddenCostType:${cost.id}`,cost.costTypes||[],'hidden')}</div><label class="v2-rhythm-note">备注<textarea data-hidden-field="note" rows="2" placeholder="例如：来回花了不少精力">${esc(cost.note||'')}</textarea></label></div>`).join('')||'<p class="hint">先点上面的琐事标签，再补充时间、金额和影响。</p>'}</div>
+      <div class="v2-row end"><button class="v2-primary" data-rhythm-save="hidden">保存隐形成本</button></div>
+    </details>
+    <div class="v2-panel">
+      <h3>🛟 低电量应急包</h3>
+      ${overview.lowEnergy?`<div class="v2-rhythm-alert">当前状态更适合先恢复，再安排高强度任务。</div>`:''}
+      <div class="v2-rhythm-emergency-grid"><div><b>5 分钟恢复</b>${emergency.quick.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>15 分钟恢复</b>${emergency.short.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>30 分钟恢复</b>${emergency.medium.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>直接休息</b>${emergency.rest.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>
     </div>
-    <div class="v2-panel"><h3>🧋 今日补能方式</h3>${tagButtons(RECHARGE_OPTIONS,'rechargeTags',entry.rechargeTags,'soft')}<div class="v2-row" style="margin-top:8px">${RECHARGE_OPTIONS.filter(x=>entry.rechargeTags.includes(x)).map(x=>`<button class="v2-chip ${entry.rechargeTop===x?'active':''}" data-rhythm-top="${esc(x)}">⭐ ${esc(x)}</button>`).join('')}</div></div>
-    <div class="v2-panel"><h3>🪫 今日能量消耗</h3>${tagButtons(DRAIN_OPTIONS,'drainTags',entry.drainTags,'drain')}<p class="hint" style="margin-top:8px">轻点标签即可记下，AI 会把这些当成“高耗能源”。</p></div>
-    <div class="v2-panel"><h3>🧭 今日节奏与掌控感</h3><div class="v2-rhythm-scale">${['很顺','一般','有点乱','完全被打乱'].map(x=>`<button class="v2-rhythm-pill ${entry.rhythm===x?'active':''}" data-rhythm-field="rhythm" data-value="${x}">${x}</button>`).join('')}</div><div class="v2-rhythm-scale" style="margin-top:8px">${['高','中','低'].map(x=>`<button class="v2-rhythm-pill ${entry.control===x?'active':''}" data-rhythm-field="control" data-value="${x}">掌控感${x}</button>`).join('')}</div></div>
-    <div class="v2-panel"><h3>📴 今日打断源</h3>${tagButtons(INTERRUPT_OPTIONS,'interrupts',entry.interrupts,'interrupt')}</div>
-    <div class="v2-panel"><h3>👜 隐形成本</h3>${tagButtons(HIDDEN_COST_OPTIONS,'hiddenCosts',entry.hiddenCosts.map(x=>x.title),'hidden')}<p class="hint" style="margin-top:8px">这些不一定算正式任务，但很容易偷走时间和心力。</p></div>
-    <div class="v2-panel"><h3>🛟 低电量应急包</h3><div class="v2-rhythm-emergency-grid"><div><b>5 分钟恢复</b>${emergency.quick.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>15 分钟恢复</b>${emergency.short.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>30 分钟恢复</b>${emergency.medium.map(x=>`<span>${esc(x)}</span>`).join('')}</div><div><b>今天先休息</b>${emergency.rest.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></div>
-    <div class="v2-panel"><h3>🤖 一句话交给 AI 识别</h3><div class="v2-fields"><textarea id="v2RhythmText" rows="4" placeholder="例如：今天状态很差，上午被咨询打断好多次，还去拿了快递和买东西，洗了澡喝了奶茶才稍微好一点。">${esc(entry.note||'')}</textarea><div class="v2-row end"><button class="v2-secondary" id="v2RhythmParse">自动识别归类</button><button class="v2-primary" id="v2RhythmSave">保存今天状态</button></div></div></div>
+    <div class="v2-panel"><h3>🤖 一句话交给 AI 识别</h3><div class="v2-fields"><textarea id="v2RhythmText" rows="4" placeholder="例如：今天状态很差，上午被咨询打断好多次，还去拿了快递和买东西，洗了澡喝了奶茶才稍微好一点。">${esc(entry.note||'')}</textarea><div class="v2-row end"><button class="v2-secondary" id="v2RhythmParse">自动识别归类</button><button class="v2-primary" id="v2RhythmSaveAll">保存整页记录</button></div></div></div>
   `;
-  target.querySelectorAll('[data-rhythm-field]').forEach(btn=>btn.addEventListener('click',()=>{const e=getLifeRhythmEntry(date,true);e[btn.dataset.rhythmField]=btn.dataset.value;saveLifeRhythmEntry(e);renderLifeRhythmRoute();renderLifeRhythmSection()}));
-  target.querySelectorAll('[data-rhythm-toggle]').forEach(btn=>btn.addEventListener('click',()=>toggleLifeRhythmTag(date,btn.dataset.rhythmToggle,btn.dataset.value)));
-  target.querySelectorAll('[data-rhythm-top]').forEach(btn=>btn.addEventListener('click',()=>{const e=getLifeRhythmEntry(date,true);e.rechargeTop=btn.dataset.rhythmTop;saveLifeRhythmEntry(e);renderLifeRhythmRoute();renderLifeRhythmSection()}));
+  bindLifeRhythmInteractions(date);
+}
+function bindLifeRhythmInteractions(date){
+  document.getElementById('v2RhythmQuickFlow')?.addEventListener('click',()=>openRhythmQuickRecord(date));
+  document.getElementById('v2RhythmCompletionPercent')?.addEventListener('input',e=>{const out=document.getElementById('v2RhythmCompletionOutput');if(out)out.textContent=e.target.value});
+  document.querySelectorAll('[data-rhythm-field]').forEach(btn=>btn.addEventListener('click',()=>{const e=collectLifeRhythmDraftFromForm(date);e[btn.dataset.rhythmField]=btn.dataset.value;saveLifeRhythmEntry(e);renderLifeRhythmRoute();renderLifeRhythmSection()}));
+  document.querySelectorAll('[data-rhythm-toggle]').forEach(btn=>btn.addEventListener('click',()=>toggleLifeRhythmTag(date,btn.dataset.rhythmToggle,btn.dataset.value)));
+  document.querySelectorAll('[data-hidden-remove]').forEach(btn=>btn.addEventListener('click',()=>removeHiddenCost(date,btn.dataset.hiddenRemove)));
+  document.querySelectorAll('[data-rhythm-save]').forEach(btn=>btn.addEventListener('click',()=>saveLifeRhythmFromForm(date,btn.dataset.rhythmSave)));
   document.getElementById('v2RhythmParse')?.addEventListener('click',()=>applyLifeRhythmText(date));
-  document.getElementById('v2RhythmSave')?.addEventListener('click',()=>saveLifeRhythmFromForm(date));
+  document.getElementById('v2RhythmSaveAll')?.addEventListener('click',()=>saveLifeRhythmFromForm(date,'all'));
 }
 function toggleLifeRhythmTag(date,key,value){
-  const entry=getLifeRhythmEntry(date,true);
-  if(key==='hiddenCosts'){
+  const entry=collectLifeRhythmDraftFromForm(date);
+  if(key==='hiddenCostsLibrary'){
     const idx=entry.hiddenCosts.findIndex(x=>x.title===value);
-    if(idx>=0)entry.hiddenCosts.splice(idx,1);else entry.hiddenCosts.push({id:'hc-'+genId(),title:value,duration:'<30m',disrupted:'有点',costType:'时间'});
+    if(idx>=0)entry.hiddenCosts.splice(idx,1);else entry.hiddenCosts.push({id:'hc-'+genId(),title:value,duration:'',money:'',disrupted:'否',costTypes:['时间'],note:''});
+  }else if(key.startsWith('hiddenCostType:')){
+    const id=key.split(':')[1],item=(entry.hiddenCosts||[]).find(x=>x.id===id);if(item){const list=item.costTypes||[];item.costTypes=list.includes(value)?list.filter(x=>x!==value):list.concat(value)}
+  }else if(key==='movementType'){
+    entry.movementType=entry.movementType===value?'':value;
   }else{
     const list=entry[key]||[];
-    const next=list.includes(value)?list.filter(x=>x!==value):list.concat(value);
-    entry[key]=next;
+    entry[key]=list.includes(value)?list.filter(x=>x!==value):list.concat(value);
   }
   saveLifeRhythmEntry(entry);renderLifeRhythmRoute();renderLifeRhythmSection();
 }
-function saveLifeRhythmFromForm(date){
+function removeHiddenCost(date,id){
+  const entry=collectLifeRhythmDraftFromForm(date);
+  entry.hiddenCosts=(entry.hiddenCosts||[]).filter(x=>x.id!==id);
+  saveLifeRhythmEntry(entry);renderLifeRhythmRoute();renderLifeRhythmSection();
+}
+function collectLifeRhythmDraftFromForm(date){
   const entry=getLifeRhythmEntry(date,true);
+  entry.bedTime=document.getElementById('v2RhythmBedTime')?.value||entry.bedTime;
   entry.sleepStart=document.getElementById('v2RhythmSleepStart')?.value||entry.sleepStart;
-  entry.sleepEnd=document.getElementById('v2RhythmSleepEnd')?.value||entry.sleepEnd;
-  entry.bodyState=document.getElementById('v2RhythmBody')?.value||entry.bodyState;
-  entry.mindState=document.getElementById('v2RhythmMind')?.value||entry.mindState;
-  entry.moodState=document.getElementById('v2RhythmMood')?.value||entry.moodState;
+  entry.wakeTime=document.getElementById('v2RhythmWakeTime')?.value||entry.wakeTime;
+  entry.sleepNote=document.getElementById('v2RhythmSleepNote')?.value.trim()||'';
+  entry.bodyNote=document.getElementById('v2RhythmBodyNote')?.value.trim()||'';
+  entry.moodNote=document.getElementById('v2RhythmMoodNote')?.value.trim()||'';
+  entry.stuckTask=document.getElementById('v2RhythmStuckTask')?.value.trim()||'';
+  entry.rhythmNote=document.getElementById('v2RhythmNote')?.value.trim()||'';
+  entry.completionPercent=document.getElementById('v2RhythmCompletionPercent')?.value||entry.completionPercent;
   entry.note=document.getElementById('v2RhythmText')?.value.trim()||entry.note;
-  saveLifeRhythmEntry(entry);renderLifeRhythmRoute();renderLifeRhythmSection();toast('已保存今天的生活状态')
+  document.querySelectorAll('.v2-hidden-cost-row').forEach(row=>{
+    const id=row.dataset.costId,item=(entry.hiddenCosts||[]).find(x=>x.id===id);if(!item)return;
+    row.querySelectorAll('[data-hidden-field]').forEach(input=>item[input.dataset.hiddenField]=input.value.trim())
+  });
+  return entry
+}
+function saveLifeRhythmFromForm(date){
+  const entry=collectLifeRhythmDraftFromForm(date);
+  saveLifeRhythmEntry(entry);renderLifeRhythmRoute();renderLifeRhythmSection();toast('已更新今日状态')
+}
+function ensureRhythmQuickOverlay(){
+  let overlay=document.getElementById('v2RhythmQuickOverlay');
+  if(overlay)return overlay;
+  overlay=document.createElement('div');overlay.id='v2RhythmQuickOverlay';overlay.className='chat-overlay';
+  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">快速记录今天</div><button class="chat-close" id="v2QuickRhythmClose">✕</button></div><div class="v2-panel" style="margin:0"><div id="v2RhythmQuickBody"></div><div class="v2-row end" style="margin-top:12px"><button class="v2-secondary" id="v2RhythmQuickCancel">取消</button><button class="v2-primary" id="v2RhythmQuickSave">保存今天状态</button></div></div></div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('v2QuickRhythmClose').addEventListener('click',()=>overlay.classList.remove('show'));
+  document.getElementById('v2RhythmQuickCancel').addEventListener('click',()=>overlay.classList.remove('show'));
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('show')});
+  return overlay
+}
+function openRhythmQuickRecord(date=todayStr()){
+  const overlay=ensureRhythmQuickOverlay(),entry=getLifeRhythmEntry(date,true),body=document.getElementById('v2RhythmQuickBody');
+  body.innerHTML=`
+    <div class="v2-rhythm-field"><b>今日电量</b>${renderChipOptions(['低电量','中等电量','高电量'],'quickEnergy',[entry.energyLevel].filter(Boolean))}</div>
+    <div class="v2-rhythm-field"><b>今日心情</b>${renderChipOptions(['开心','平静','焦虑','烦躁','低落','混乱'],'quickMood',[entry.moodState].filter(Boolean))}</div>
+    <div class="v2-rhythm-field"><b>今日节奏</b>${renderChipOptions(['很顺','一般','有点卡','很乱','被打乱'],'quickRhythm',[entry.rhythm].filter(Boolean))}</div>
+    <label class="v2-rhythm-range">任务完成度 <output id="v2QuickCompletionOutput">${esc(entry.completionPercent||taskCompletionPercent(date))}</output>%<input id="v2QuickCompletion" type="range" min="0" max="100" step="5" value="${esc(entry.completionPercent||taskCompletionPercent(date))}"></label>
+    <div class="v2-rhythm-field"><b>补能方式</b>${renderChipOptions(RECHARGE_OPTIONS,'quickRecharge',entry.rechargeTags||[],'soft')}</div>
+    <div class="v2-rhythm-field"><b>消耗来源</b>${renderChipOptions(DRAIN_OPTIONS,'quickDrain',entry.drainTags||[],'drain')}</div>
+    <div class="v2-rhythm-field"><b>打断源</b>${renderChipOptions(INTERRUPT_OPTIONS,'quickInterrupt',entry.rhythmFactors||[],'interrupt')}</div>
+    <label class="v2-rhythm-note">备注<textarea id="v2QuickRhythmNote" rows="3" placeholder="补一句今天为什么会累、乱或顺">${esc(entry.note||'')}</textarea></label>`;
+  overlay.classList.add('show');
+  body.querySelectorAll('[data-rhythm-toggle]').forEach(btn=>btn.addEventListener('click',()=>{
+    const key=btn.dataset.rhythmToggle;
+    if(['quickEnergy','quickMood','quickRhythm'].includes(key)){
+      body.querySelectorAll(`[data-rhythm-toggle="${key}"]`).forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+    }else{
+      btn.classList.toggle('active');
+    }
+  }));
+  document.getElementById('v2QuickCompletion')?.addEventListener('input',e=>{document.getElementById('v2QuickCompletionOutput').textContent=e.target.value});
+  document.getElementById('v2RhythmQuickSave').onclick=()=>saveRhythmQuickRecord(date)
+}
+function saveRhythmQuickRecord(date=todayStr()){
+  const entry=getLifeRhythmEntry(date,true);
+  const active=(key)=>[...document.querySelectorAll(`#v2RhythmQuickBody [data-rhythm-toggle="${key}"].active`)].map(x=>x.dataset.value);
+  entry.energyLevel=active('quickEnergy')[0]||entry.energyLevel;
+  entry.moodState=active('quickMood')[0]||entry.moodState;
+  entry.rhythm=active('quickRhythm')[0]||entry.rhythm;
+  entry.completionPercent=document.getElementById('v2QuickCompletion')?.value||entry.completionPercent;
+  entry.rechargeTags=active('quickRecharge');
+  entry.drainTags=active('quickDrain');
+  entry.rhythmFactors=active('quickInterrupt');
+  entry.note=document.getElementById('v2QuickRhythmNote')?.value.trim()||entry.note;
+  saveLifeRhythmEntry(entry);
+  document.getElementById('v2RhythmQuickOverlay')?.classList.remove('show');
+  renderLifeRhythmRoute();renderLifeRhythmSection();toast('已快速记录今天')
 }
 function applyLifeRhythmText(date){
   const text=document.getElementById('v2RhythmText')?.value.trim();if(!text){toast('先写一句今天的状态');return}
@@ -1005,7 +1210,7 @@ function renderDaySheet(){
   let html=`<div class="v2-day-summary"><span>${items.length} 项任务</span><span>${done} 项完成</span><span>${past?'历史回顾':selectedDay===todayStr()?'今天':'未来计划'}</span></div>`;
   if(holiday||birthdays.length)html+=`<div class="v2-panel"><div class="v2-row">${holiday?`<span class="v2-chip active">${esc(holiday)}</span>`:''}${birthdays.length?`<span class="v2-chip">🎂 ${birthdays.map(x=>x.name).join('、')}</span>`:''}</div></div>`;
   const rhythm=getLifeRhythmEntry(selectedDay,false);
-  if(rhythm)html+=`<div class="v2-panel"><h3>🔋 当天状态感知</h3><div class="v2-rhythm-summary"><span>${esc(rhythm.sleepStart&&rhythm.sleepEnd?`😴 ${rhythm.sleepStart}-${rhythm.sleepEnd}${sleepDurationText(rhythm.sleepStart,rhythm.sleepEnd)?` · ${sleepDurationText(rhythm.sleepStart,rhythm.sleepEnd)}`:''}`:'😴 睡眠未填')}</span><span>${esc(rhythm.energyLevel||'电量未填')}</span><span>${esc(rhythm.rhythm||'节奏未填')}</span><span>${esc(rhythm.control?`掌控感${rhythm.control}`:'掌控感未填')}</span></div><div class="v2-rhythm-tags" style="margin-top:8px">${(rhythm.rechargeTags||[]).slice(0,3).map(x=>`<span class="v2-chip active">补能·${esc(x)}</span>`).join('')}${(rhythm.drainTags||[]).slice(0,3).map(x=>`<span class="v2-chip">消耗·${esc(x)}</span>`).join('')}${(rhythm.interrupts||[]).slice(0,2).map(x=>`<span class="v2-chip">打断·${esc(x)}</span>`).join('')}</div>${rhythm.note?`<div class="v2-day-meta" style="margin-top:8px;white-space:pre-wrap">${esc(rhythm.note)}</div>`:''}<div class="v2-row end" style="margin-top:10px"><button class="v2-secondary" id="v2OpenRhythmDay">编辑这一天的状态</button></div></div>`;
+  if(rhythm)html+=`<div class="v2-panel"><h3>🔋 当天状态感知</h3><div class="v2-rhythm-summary"><span>${esc(rhythm.sleepStart&&rhythm.wakeTime?`😴 ${rhythm.sleepStart}-${rhythm.wakeTime}${sleepDurationText(rhythm.sleepStart,rhythm.wakeTime)?` · ${sleepDurationText(rhythm.sleepStart,rhythm.wakeTime)}`:''}`:'😴 睡眠未填')}</span><span>${esc(rhythm.energyLevel||'电量未填')}</span><span>${esc(rhythm.rhythm||'节奏未填')}</span><span>${esc(rhythm.control?`掌控感${rhythm.control}`:'掌控感未填')}</span></div><div class="v2-rhythm-tags" style="margin-top:8px">${(rhythm.rechargeTags||[]).slice(0,3).map(x=>`<span class="v2-chip active">补能·${esc(x)}</span>`).join('')}${(rhythm.drainTags||[]).slice(0,3).map(x=>`<span class="v2-chip">消耗·${esc(x)}</span>`).join('')}${((rhythm.rhythmFactors||rhythm.interrupts||[]).slice(0,2)).map(x=>`<span class="v2-chip">打断·${esc(x)}</span>`).join('')}</div>${(rhythm.note||rhythm.rhythmNote)?`<div class="v2-day-meta" style="margin-top:8px;white-space:pre-wrap">${esc(rhythm.rhythmNote||rhythm.note)}</div>`:''}<div class="v2-row end" style="margin-top:10px"><button class="v2-secondary" id="v2OpenRhythmDay">编辑这一天的状态</button></div></div>`;
   if(past&&!getPlan(selectedDay,false))html+='<div class="v2-warning">旧版没有保存这一天的任务快照，因此只能显示当时实际保存下来的记录。V2 启用后的日期会完整保留。</div>';
   const sortedItems=[...items].sort((a,b)=>(a.plannedStart||'99:99').localeCompare(b.plannedStart||'99:99'));
   let currentSlot='';
@@ -1495,7 +1700,7 @@ window.v2Boot=function(){
   initRuntimeAppInfo().then(()=>applyRuntimeVersionMigration()).then(changed=>{if(changed)toast(`已切换到新版本 ${versionLabel()}`)});
   setTimeout(()=>checkForAppUpdates(true),1600);
   try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
-  if(source==='empty'&&!hasMeaningfulData())document.getElementById('v2ImportBanner').classList.remove('v2-hidden');else document.getElementById('v2ImportBanner').classList.add('v2-hidden');
+  document.getElementById('v2ImportBanner').classList.add('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
   autoGeneratePeriodicReviews();
   syncCloudForm();
@@ -1503,11 +1708,3 @@ window.v2Boot=function(){
   maybeSendBirthdayWebNotice();
 };
 })();
-  const sleepMatch=src.match(/(?:睡[到着觉]?|入睡|睡觉)[^\d]*([0-2]?\d)(?:[:点时](\d{1,2}))?/);
-  const wakeMatch=src.match(/(?:起床|醒来|睡到)[^\d]*([0-2]?\d)(?:[:点时](\d{1,2}))?/);
-  const toClock=(m)=>m?`${String(Number(m[1]||0)).padStart(2,'0')}:${String(Number(m[2]||0)).padStart(2,'0')}`:'';
-  if(sleepMatch)entry.sleepStart=toClock(sleepMatch);
-  if(wakeMatch)entry.sleepEnd=toClock(wakeMatch);
-  if(/熬夜|睡得晚/.test(src))entry.sleepQuality='熬夜';
-  else if(/睡得好|睡得不错|睡得还行/.test(src))entry.sleepQuality='还不错';
-  else if(/没睡好|睡不好|困/.test(src))entry.sleepQuality='没睡好';
