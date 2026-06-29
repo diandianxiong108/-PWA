@@ -5,9 +5,10 @@
   "description": "任务管家 V2 - 华为 HarmonyOS 4.3 个人安装版",
   "scripts": {
     "web:prepare": "node tools/prepare-www.cjs",
+    "android:fix-java": "node tools/fix-android-java.cjs",
     "cap:add:android": "npm run web:prepare && cap add android",
     "cap:sync": "npm run web:prepare && cap sync android",
-    "android:build:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug"
+    "android:build:debug": "npm run cap:sync && npm run android:fix-java && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "8.4.1",
