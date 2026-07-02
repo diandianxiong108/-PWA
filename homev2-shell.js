@@ -246,6 +246,24 @@
     return overlay;
   }
 
+  function safeCall(fn){
+    try{
+      return fn();
+    }catch(error){
+      console.error('HomeV2 action failed:', error);
+      return false;
+    }
+  }
+
+  function triggerHidden(selector){
+    const node = document.querySelector(selector);
+    if(!node) return false;
+    return safeCall(() => {
+      node.click();
+      return true;
+    });
+  }
+
   function openFeatureSheet(){
     const overlay = ensureFeatureSheet();
     const body = document.getElementById('homeV2FeatureBody');
@@ -269,35 +287,40 @@
   }
 
   function openRouteSection(sectionId){
-    if(typeof window.openModulePage === 'function'){
+    if(typeof window.openModulePage === 'function' && safeCall(() => {
       window.openModulePage(sectionId);
       return true;
-    }
-    if(typeof openModulePage === 'function'){
+    })) return true;
+    if(typeof openModulePage === 'function' && safeCall(() => {
       openModulePage(sectionId);
       return true;
-    }
+    })) return true;
+    if(triggerHidden(`#v2Launchers [data-route="${sectionId}"]`)) return true;
     return false;
   }
 
   function openDay(){
-    if(typeof window.openDaySheet === 'function'){
+    if(typeof window.openDaySheet === 'function' && safeCall(() => {
       window.openDaySheet(todayKey());
-      return;
-    }
-    if(typeof openDaySheet === 'function'){
+      return true;
+    })) return true;
+    if(typeof openDaySheet === 'function' && safeCall(() => {
       openDaySheet(todayKey());
-    }
+      return true;
+    })) return true;
+    return triggerHidden('#v2OverviewOpenDay');
   }
 
   function openPlanner(){
-    if(typeof window.openPlannerPage === 'function'){
+    if(typeof window.openPlannerPage === 'function' && safeCall(() => {
       window.openPlannerPage();
-      return;
-    }
-    if(typeof openPlannerPage === 'function'){
+      return true;
+    })) return true;
+    if(typeof openPlannerPage === 'function' && safeCall(() => {
       openPlannerPage();
-    }
+      return true;
+    })) return true;
+    return triggerHidden('#v2PlanEntry') || triggerHidden('#v2OverviewPlanner');
   }
 
   function triggerAction(action){
@@ -330,12 +353,18 @@
         openRouteSection('billSection');
         break;
       case 'assistant':
-        document.getElementById('chatOverlay')?.classList.add('show');
-        document.getElementById('chatInput')?.focus();
+        safeCall(() => {
+          document.getElementById('chatOverlay')?.classList.add('show');
+          document.getElementById('chatInput')?.focus();
+          return true;
+        });
         break;
       case 'capture':
-        document.getElementById('v2CaptureOverlay')?.classList.add('show');
-        document.getElementById('v2CaptureInput')?.focus();
+        safeCall(() => {
+          document.getElementById('v2CaptureOverlay')?.classList.add('show');
+          document.getElementById('v2CaptureInput')?.focus();
+          return true;
+        });
         break;
       case 'planner':
         openPlanner();
@@ -347,6 +376,30 @@
         openFeatureSheet();
         break;
     }
+  }
+
+  function ensureFloatingTools(){
+    let wrap = document.getElementById('homeV2FloatingTools');
+    if(!wrap){
+      wrap = document.createElement('div');
+      wrap.id = 'homeV2FloatingTools';
+      wrap.className = 'homev2-floating-tools';
+      wrap.innerHTML = `
+        <button class="homev2-floating-btn capture" type="button" data-homev2-action="capture">
+          <img src="${asset('icons-collage-v2/icon-note.png')}" alt="智能识别">
+          <span>智能识别</span>
+        </button>
+        <button class="homev2-floating-btn assistant" type="button" data-homev2-action="assistant">
+          <img src="${asset('icons-collage-v2/icon-ai-review.png')}" alt="AI助手">
+          <span>AI助手</span>
+        </button>
+      `;
+      document.body.appendChild(wrap);
+    }
+    wrap.querySelectorAll('[data-homev2-action]').forEach(button => {
+      button.onclick = () => triggerAction(button.dataset.homev2Action);
+    });
+    return wrap;
   }
 
   function renderShell(){
@@ -604,6 +657,7 @@
     `;
 
     document.body.classList.add('homev2-shell-active');
+    ensureFloatingTools();
 
     const chatFab = document.getElementById('chatFab');
     const captureFab = document.getElementById('v2CaptureFab');
@@ -620,11 +674,16 @@
 
     mount.querySelectorAll('[data-homev2-mode]').forEach(button => {
       button.addEventListener('click', () => {
-        if(typeof window.setAppMode === 'function'){
-          window.setAppMode(button.dataset.homev2Mode);
-        }else if(typeof setAppMode === 'function'){
-          setAppMode(button.dataset.homev2Mode);
-        }
+        const nextMode = button.dataset.homev2Mode;
+        if(typeof window.setAppMode === 'function' && safeCall(() => {
+          window.setAppMode(nextMode);
+          return true;
+        })) return;
+        if(typeof setAppMode === 'function' && safeCall(() => {
+          setAppMode(nextMode);
+          return true;
+        })) return;
+        triggerHidden(`#v2ModeSwitch [data-mode="${nextMode}"]`) || triggerHidden(`#statusBar #v2StatusModeChip`);
       });
     });
   }

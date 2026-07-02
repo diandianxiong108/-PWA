@@ -942,6 +942,54 @@ body.homev2-shell-active{
 .homev2-shell-active #chatFab::after{content:"AI助手"}
 .homev2-shell-active #v2CaptureFab::after{content:"智能识别"}
 
+.homev2-floating-tools{
+  position:fixed;
+  right:16px;
+  bottom:24px;
+  z-index:360;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.homev2-floating-btn{
+  width:72px;
+  min-height:72px;
+  border:none;
+  border-radius:999px;
+  background:linear-gradient(180deg,#fffef9,#fff3df);
+  border:1px solid #eadfcd;
+  box-shadow:0 16px 28px rgba(188,176,145,.20);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  padding:8px 6px;
+}
+
+.homev2-floating-btn img{
+  width:28px;
+  height:28px;
+  object-fit:contain;
+}
+
+.homev2-floating-btn span{
+  font-size:11px;
+  line-height:1.1;
+  font-weight:800;
+  color:#537356;
+  writing-mode:horizontal-tb!important;
+}
+
+.homev2-floating-btn.capture{
+  background:linear-gradient(180deg,#fff9ef,#ffeccc);
+}
+
+.homev2-floating-btn.assistant{
+  background:linear-gradient(180deg,#f5fff5,#e7f6ea);
+}
+
 .homev2-feature-overlay{
   position:fixed;
   inset:0;
