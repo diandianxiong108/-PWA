@@ -573,8 +573,418 @@ const GENERIC_ROUTE_COPY={
   wish:{title:'愿望基金慢慢攒，也会有力量',body:'这里不用天天盯，只要偶尔回来看看，目标就会更具体。',focus:['先看当前目标','收入到了再补','保持一点期待']},
   default:{title:'这一页也可以是温柔的工作台',body:'逻辑不动，我们只是把它整理成更顺手、更好扫一眼的样子。',focus:['先看最上面摘要','再做一个小动作','剩下的慢慢来']}
 };
+function recentItems(list,limit=4){
+  return(list||[]).slice().sort((a,b)=>String(b.createdAt||b.earnedAt||b.date||'').localeCompare(String(a.createdAt||a.earnedAt||a.date||''))).slice(0,limit)
+}
+function prepareUtilityRouteShell(sectionId,shellClass='v2-generic-route-shell'){
+  if(!routeState)return null;
+  const body=document.getElementById('v2RouteBody');
+  const section=document.getElementById(sectionId);
+  if(!body||!section)return null;
+  body.querySelector(`.${shellClass}`)?.remove();
+  return{body,section}
+}
+function utilityFocusChips(items,emptyText='慢慢补也来得及'){
+  return items.length?items.map(text=>`<span class="v2-chip active">${esc(text)}</span>`).join(''):`<span class="v2-chip">${esc(emptyText)}</span>`
+}
+function utilityRecentList(items,emptyText='这一页还没有内容'){
+  return items.length?items.map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''):`<span class="v2-chip">${esc(emptyText)}</span>`
+}
+function mountUtilityRoute(sectionId,options){
+  const prepared=prepareUtilityRouteShell(sectionId,options.shellClass||'v2-generic-route-shell');
+  if(!prepared)return;
+  const {body,section}=prepared;
+  const shell=document.createElement('div');
+  shell.className=options.shellClass||'v2-generic-route-shell';
+  shell.innerHTML=`
+    <div class="v2-route-overview ${options.theme||'day'} v2-route-journal">
+      <div class="v2-route-overview-main">
+        <div>
+          ${routeEyebrow(options.eyebrowKind||'day',options.eyebrowLabel||HOME_ROUTES[sectionId]?.[0]||'模块整理')}
+          <h3>${esc(options.title)}</h3>
+          <p>${esc(options.body)}</p>
+        </div>
+        <div class="v2-route-overview-progress">
+          <div class="v2-overview-ring"><strong>${esc(options.ringValue)}</strong><span>${esc(options.ringLabel)}</span></div>
+          <div class="v2-overview-bar">
+            <div class="v2-overview-bar-track"><span style="width:${Number(options.progressWidth)||36}%"></span></div>
+            <small>${esc(options.progressText)}</small>
+          </div>
+        </div>
+        ${routeDecorPair()}
+      </div>
+      <div class="v2-overview-cards">${options.cards.join('')}</div>
+      ${options.focusHtml?`<div class="v2-route-overview-focus">${options.focusHtml}</div>`:''}
+    </div>
+    <div class="v2-route-mini-grid">
+      <div class="v2-panel v2-mini-note">
+        <h3>${routeMiniTitle(options.miniKindA||options.eyebrowKind||'day',options.miniTitleA||'先看这里')}</h3>
+        <div class="v2-mini-list">${options.miniHtmlA||''}</div>
+        ${options.miniHintA?`<p class="hint" style="margin-top:10px">${esc(options.miniHintA)}</p>`:''}
+      </div>
+      <div class="v2-panel v2-mini-note">
+        <h3>${routeMiniTitle(options.miniKindB||options.eyebrowKind||'day',options.miniTitleB||'最近内容')}</h3>
+        <div class="v2-mini-list">${options.miniHtmlB||''}</div>
+        ${options.miniHintB?`<p class="hint" style="margin-top:10px">${esc(options.miniHintB)}</p>`:''}
+      </div>
+    </div>
+    ${routePromptCard(options.promptKind||options.eyebrowKind||'day',options.promptTitle||'先从一小步开始',options.promptBody||options.body,options.promptChips||[])}
+  `;
+  body.insertBefore(shell,section);
+}
+function renderBillRoute(){
+  const entries=(appData.records?.entries||[]);
+  const month=todayStr().slice(0,7);
+  const today=todayStr();
+  const todayEntries=entries.filter(x=>x.date===today);
+  const monthEntries=entries.filter(x=>String(x.date||'').startsWith(month));
+  const income=monthEntries.filter(x=>x.type==='income').reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const expense=monthEntries.filter(x=>x.type==='expense').reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const cats=new Set(monthEntries.map(x=>x.category).filter(Boolean));
+  const recent=recentItems(entries,4).map(item=>`${item.category||'未分类'} · ${item.type==='income'?'+':'-'}${item.amount||0}`);
+  mountUtilityRoute('billSection',{
+    shellClass:'v2-bill-route-shell',
+    theme:'project',
+    eyebrowKind:'project',
+    eyebrowLabel:'账单',
+    title:'每一笔都轻轻记下来，心里会更稳',
+    body:'这里保留你原来的真实记账逻辑。上面只负责把本月收支和最近几笔提炼出来，让你不用进来就先看长列表。',
+    ringValue:monthEntries.length,
+    ringLabel:'本月记录',
+    progressWidth:Math.min(100,28+monthEntries.length*8),
+    progressText:`收入 ${income.toFixed(1)} · 支出 ${expense.toFixed(1)}`,
+    cards:[
+      routeCard('detail-icons-v1/icon-receipt-cute.png',`+${income.toFixed(1)}`,'本月收入'),
+      routeCard('detail-icons-v1/icon-receipt-cute.png',`-${expense.toFixed(1)}`,'本月支出'),
+      routeCard('icons-collage-v2/icon-daily-task.png',todayEntries.length,'今天记了几笔'),
+      routeCard('icons-collage-v2/icon-all.png',cats.size,'本月分类数')
+    ],
+    focusHtml:todayEntries.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.category||'未分类')} · ${item.type==='income'?'+':'-'}${esc(item.amount||0)}</span>`).join(''),
+    miniKindA:'project',
+    miniTitleA:'先记今天',
+    miniHtmlA:utilityFocusChips(['先补今天支出','收入单独记','分类不确定先随手记'],'今天还没记账也没关系'),
+    miniHintA:'不用一下补齐一整个月，先接住今天发生的这几笔就好。',
+    miniKindB:'project',
+    miniTitleB:'最近几笔',
+    miniHtmlB:utilityRecentList(recent,'最近还没有账单记录'),
+    miniHintB:'下面保留的是原来的真实账单模块。',
+    promptKind:'project',
+    promptTitle:'先记第一笔',
+    promptBody:'你不需要一次把账本整理得很完美，先把今天发生的那一笔写下来，后面复盘就会轻松很多。',
+    promptChips:['先记支出','收入单独记']
+  });
+}
+function renderExtraRoute(){
+  const extras=(appData.notes||[]).filter(x=>x.done||x.title==='额外完成');
+  const todayExtras=extras.filter(x=>x.date===todayStr());
+  const recent=recentItems(extras,4).map(item=>(item.text||item.title||'额外完成').slice(0,22));
+  mountUtilityRoute('extraSection',{
+    shellClass:'v2-extra-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'额外完成',
+    title:'没排进去但做掉的，也值得被认真看见',
+    body:'这一页不是任务后台，而是把那些计划外却真实消耗了你时间和精力的完成记录接住。AI 后面复盘也会参考这里。',
+    ringValue:todayExtras.length,
+    ringLabel:'今日额外完成',
+    progressWidth:Math.min(100,34+todayExtras.length*18),
+    progressText:`累计 ${extras.length} 条额外完成记录`,
+    cards:[
+      routeCard('ui-icons-collage-v1/icon-complete-badge.png',todayExtras.length,'今天额外完成'),
+      routeCard('icons-collage-v2/icon-note.png',extras.length,'累计记录'),
+      routeCard('detail-icons-v1/icon-mood-cute.png',recent.length,'最近可回看'),
+      routeCard('icons-collage-v2/icon-ai-review.png',(appData.v2?.smartCapture?.uploadLog||[]).length,'可进复盘素材')
+    ],
+    focusHtml:todayExtras.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.text||item.title||'额外完成').slice(0,18))}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'怎么记更轻',
+    miniHtmlA:utilityFocusChips(['先写一句今天多做了什么','不用整理成很正式','后面再交给 AI'],'先记一句也有价值'),
+    miniHintA:'额外完成本来就常常是碎的，先留下痕迹最重要。',
+    miniKindB:'day',
+    miniTitleB:'最近这些',
+    miniHtmlB:utilityRecentList(recent,'最近还没有额外完成记录'),
+    miniHintB:'下面还是原来的真实额外完成区。',
+    promptKind:'day',
+    promptTitle:'先记一句今天多做了什么',
+    promptBody:'那些没排进计划却做掉的事，往往最能解释你为什么会累，也最值得被复盘看见。',
+    promptChips:['先写一句','后面再让 AI 整理']
+  });
+}
+function renderInspireRoute(){
+  const items=appData.inspirations||[];
+  const todayItems=items.filter(x=>x.date===todayStr());
+  const moods=new Set(items.map(x=>x.emotion).filter(Boolean));
+  const recent=recentItems(items,4).map(item=>(item.text||'灵感').slice(0,24));
+  mountUtilityRoute('inspireSection',{
+    shellClass:'v2-inspire-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'灵感便签',
+    title:'灵感先收住，别让它一下就跑了',
+    body:'这里更像你的贴纸便签页。想到一句、冒出一个点子、突然有点想法，都先收进来，不用马上整理成任务。',
+    ringValue:todayItems.length,
+    ringLabel:'今日灵感',
+    progressWidth:Math.min(100,32+todayItems.length*16),
+    progressText:`共 ${items.length} 条灵感 · ${moods.size} 种情绪标签`,
+    cards:[
+      routeCard('icons-collage-v2/icon-note.png',todayItems.length,'今天写下'),
+      routeCard('detail-icons-v1/icon-mood-cute.png',moods.size,'情绪标签'),
+      routeCard('icons-collage-v2/icon-ai-review.png',items.filter(x=>x.source==='ocr').length,'拍照录入'),
+      routeCard('icons-collage-v2/icon-all.png',items.length,'累计便签')
+    ],
+    focusHtml:todayItems.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.text||'灵感').slice(0,16))}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'现在先记',
+    miniHtmlA:utilityFocusChips(['先写一句闪过的话','重要的可以钉住','不急着改成任务'],'空白也没关系'),
+    miniHintA:'灵感的第一版通常都很碎，先收住它就已经很好了。',
+    miniKindB:'day',
+    miniTitleB:'最近火花',
+    miniHtmlB:utilityRecentList(recent,'最近还没有灵感便签'),
+    miniHintB:'下面保留原来的真实灵感板块。',
+    promptKind:'day',
+    promptTitle:'先写下一句',
+    promptBody:'灵感最怕“先等等”，先贴下来，后面再决定它是提醒、想法还是任务。',
+    promptChips:['先写一句','不急着整理']
+  });
+}
+function renderNotesRoute(){
+  const items=appData.notes||[];
+  const todayItems=items.filter(x=>x.date===todayStr()&&!x.done);
+  const ocrCount=items.filter(x=>x.source==='ocr'||x.title==='手写识别').length;
+  const recent=recentItems(items,4).map(item=>(item.title||item.text||'随手记').slice(0,22));
+  mountUtilityRoute('notesSection',{
+    shellClass:'v2-notes-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'随手记',
+    title:'脑子里的碎片先放下来，今天就会轻很多',
+    body:'这页保留你的随手记和拍照识别逻辑。上面只是把“今天写了多少、最近有什么、拍照识别用了几次”收成更顺眼的一层。',
+    ringValue:todayItems.length,
+    ringLabel:'今日随记',
+    progressWidth:Math.min(100,28+todayItems.length*18),
+    progressText:`累计 ${items.length} 条随记 · 识别录入 ${ocrCount} 条`,
+    cards:[
+      routeCard('icons-collage-v2/icon-note.png',todayItems.length,'今天写下'),
+      routeCard('detail-icons-v1/icon-book-cute.png',items.length,'累计随记'),
+      routeCard('icons-collage-v2/icon-all.png',ocrCount,'拍照识别'),
+      routeCard('detail-icons-v1/icon-mood-cute.png',items.filter(x=>x.done).length,'已整理 / 已完成')
+    ],
+    focusHtml:todayItems.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.title||item.text||'随手记').slice(0,16))}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'轻一点记',
+    miniHtmlA:utilityFocusChips(['先写标题或一句话','有图就直接识别','之后再慢慢整理'],'今天还没写也没关系'),
+    miniHintA:'这页不要求你写得完整，先把脑子里的东西放下来就行。',
+    miniKindB:'day',
+    miniTitleB:'最近这些',
+    miniHtmlB:utilityRecentList(recent,'最近还没有随手记'),
+    miniHintB:'下面就是你原来的真实随手记和 OCR 区。',
+    promptKind:'day',
+    promptTitle:'先写一个片段',
+    promptBody:'随手记本来就是缓冲区，不用一开始就想清楚结构，先放下来再说。',
+    promptChips:['先写一句','有图就识别']
+  });
+}
+function renderReviewRoute(){
+  const reviews=appData.reviews||[];
+  const payload=buildReviewSourceRange('week');
+  const sourceCount=(payload.tasks?.length||0)+(payload.inspirations?.length||0)+(payload.notes?.length||0)+(payload.eatingLogs?.length||0)+(payload.lateNightLogs?.length||0);
+  const recent=recentItems(reviews,4).map(item=>(item.title||item.summary||'复盘').slice(0,22));
+  mountUtilityRoute('reviewSection',{
+    shellClass:'v2-review-route-shell',
+    theme:'planner',
+    eyebrowKind:'planner',
+    eyebrowLabel:'AI复盘',
+    title:'复盘不是审判，是把线索慢慢收回来',
+    body:'这里适合看完成、状态、灵感、饮食波动和熬夜节点。AI 不是来评判，而是帮你看出最近到底卡在哪里。',
+    ringValue:reviews.length,
+    ringLabel:'已存复盘',
+    progressWidth:Math.min(100,24+sourceCount*4),
+    progressText:`当前可复盘素材 ${sourceCount} 条`,
+    cards:[
+      routeCard('icons-collage-v2/icon-ai-review.png',reviews.length,'已有复盘'),
+      routeCard('ui-icons-collage-v1/icon-complete-badge.png',payload.tasks.length,'完成事项'),
+      routeCard('detail-icons-v1/icon-mood-cute.png',payload.inspirations.length+payload.notes.length,'灵感 / 随记'),
+      routeCard('detail-icons-v1/icon-sleep-cute.png',payload.eatingLogs.length+payload.lateNightLogs.length,'饮食 / 熬夜')
+    ],
+    focusHtml:[`完成 ${payload.tasks.length} 条`,`随记 ${payload.notes.length} 条`,`灵感 ${payload.inspirations.length} 条`].map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
+    miniKindA:'planner',
+    miniTitleA:'先看这些线索',
+    miniHtmlA:utilityFocusChips(['先看最近完成','再看状态和情绪','最后看饮食和熬夜'],'素材还会慢慢累起来'),
+    miniHintA:'复盘素材越真实，AI 后面给你的建议才会越贴身。',
+    miniKindB:'planner',
+    miniTitleB:'最近复盘',
+    miniHtmlB:utilityRecentList(recent,'最近还没有保存过 AI 复盘'),
+    miniHintB:'下面保留原来的真实复盘区。',
+    promptKind:'planner',
+    promptTitle:'先复盘这一周',
+    promptBody:'不用等一切都整理完再复盘，先看这一周最明显的节奏变化，已经足够有帮助。',
+    promptChips:['先看最近 7 天','状态和完成一起看']
+  });
+}
+function renderBadgeRoute(){
+  const items=appData.badges||[];
+  const month=todayStr().slice(0,7);
+  const monthItems=items.filter(x=>String(x.earnedAt||'').startsWith(month));
+  const recent=recentItems(items,4).map(item=>item.title||'成就勋章');
+  mountUtilityRoute('badgeSection',{
+    shellClass:'v2-badge-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'成就勋章',
+    title:'一点点成就也值得被点亮',
+    body:'勋章页不是炫耀，而是让你偶尔抬头看见：原来你已经做成过这么多件事了。',
+    ringValue:items.length,
+    ringLabel:'已点亮',
+    progressWidth:Math.min(100,30+items.length*8),
+    progressText:`本月新增 ${monthItems.length} 枚`,
+    cards:[
+      routeCard('icons-collage-v2/icon-all.png',items.length,'累计勋章'),
+      routeCard('ui-icons-collage-v1/icon-complete-badge.png',monthItems.length,'本月点亮'),
+      routeCard('detail-icons-v1/icon-book-cute.png',recent.length,'最近可回看'),
+      routeCard('icons-collage-v2/icon-ai-review.png',appData.stars||0,'星级累计')
+    ],
+    focusHtml:monthItems.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.title||'成就勋章')}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'这一页怎么看',
+    miniHtmlA:utilityFocusChips(['先看最近点亮的','空的时候回来看看','把走过的路看见'],'这页会慢慢变亮'),
+    miniHintA:'被自己看见，也是一种很重要的补能。',
+    miniKindB:'day',
+    miniTitleB:'最近点亮',
+    miniHtmlB:utilityRecentList(recent,'最近还没有勋章记录'),
+    miniHintB:'下面仍然是原来的真实勋章列表。',
+    promptKind:'day',
+    promptTitle:'先看最近的一枚',
+    promptBody:'不用追着刷成就，偶尔回来看看自己已经做到过什么，就已经很有力量。',
+    promptChips:['先看最近一枚','慢慢点亮']
+  });
+}
+function renderWishRoute(){
+  const items=appData.wishes||[];
+  const totalCurrent=items.reduce((sum,x)=>sum+Number(x.currentAmount||0),0);
+  const totalTarget=items.reduce((sum,x)=>sum+Number(x.targetAmount||0),0);
+  const percent=totalTarget?Math.min(100,Math.round(totalCurrent/totalTarget*100)):0;
+  const recent=recentItems(items,4).map(item=>`${item.title||'愿望'} · ${Number(item.currentAmount||0)}/${Number(item.targetAmount||0)}`);
+  mountUtilityRoute('wishSection',{
+    shellClass:'v2-wish-route-shell',
+    theme:'project',
+    eyebrowKind:'project',
+    eyebrowLabel:'愿望基金',
+    title:'愿望基金慢慢攒，也会有力量',
+    body:'这里不用天天盯着冲。偶尔回来看看，目标有没有更近一点，就已经很够了。',
+    ringValue:`${percent}%`,
+    ringLabel:'整体进度',
+    progressWidth:percent||18,
+    progressText:`已攒 ${totalCurrent.toFixed(1)} / 目标 ${totalTarget.toFixed(1)}`,
+    cards:[
+      routeCard('detail-icons-v1/icon-receipt-cute.png',items.length,'基金目标'),
+      routeCard('detail-icons-v1/icon-receipt-cute.png',totalCurrent.toFixed(1),'当前累计'),
+      routeCard('icons-collage-v2/icon-goal.png',totalTarget.toFixed(1),'总目标'),
+      routeCard('icons-collage-v2/icon-note.png',(appData.v2?.financeLink?.pendingEntryIds||[]).length,'待归集收入')
+    ],
+    focusHtml:items.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.title||'愿望')} · ${Number(item.currentAmount||0)}/${Number(item.targetAmount||0)}</span>`).join(''),
+    miniKindA:'project',
+    miniTitleA:'先看当前目标',
+    miniHtmlA:utilityFocusChips(['先看最想完成的一个','收入到了再补','目标写具体一点'],'还没有基金目标也没关系'),
+    miniHintA:'这页更像给未来留一点期待，不用天天盯。',
+    miniKindB:'project',
+    miniTitleB:'最近这些目标',
+    miniHtmlB:utilityRecentList(recent,'最近还没有愿望基金项目'),
+    miniHintB:'下面保留原来的真实愿望基金区。',
+    promptKind:'project',
+    promptTitle:'先看最想完成的一个',
+    promptBody:'愿望基金不靠一下冲满，偶尔回来看看有没有更近一点，就已经在往前。',
+    promptChips:['先看一个目标','收入到了再补']
+  });
+}
+function renderBirthdayRoute(){
+  const items=appData.birthdays||[];
+  const soonCount=items.filter(item=>{
+    const d=nextBirthdayReminderDate(item);
+    if(!d)return false;
+    return Math.round((d-new Date())/86400000)<=30;
+  }).length;
+  const recent=items.slice().sort((a,b)=>(Number(a.month)-Number(b.month))||(Number(a.day)-Number(b.day))).slice(0,4).map(item=>`${item.name} · ${item.month}/${item.day}`);
+  mountUtilityRoute('birthdaySection',{
+    shellClass:'v2-birthday-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'生日提醒',
+    title:'把重要的人记住，也是一种温柔',
+    body:'生日提醒不用做得很重。先把会忘的日期接住，后面再决定提前几天提醒、要不要准备什么。',
+    ringValue:items.length,
+    ringLabel:'已记录生日',
+    progressWidth:Math.min(100,30+soonCount*14),
+    progressText:`30 天内有 ${soonCount} 个提醒节点`,
+    cards:[
+      routeCard('icons-collage-v2/icon-all.png',items.length,'累计生日'),
+      routeCard('ui-icons-collage-v1/icon-alarm.png',soonCount,'30 天内提醒'),
+      routeCard('detail-icons-v1/icon-book-cute.png',recent.length,'最近可回看'),
+      routeCard('icons-collage-v2/icon-note.png',items.filter(x=>Number(x.remindDays||0)>0).length,'已设提前提醒')
+    ],
+    focusHtml:recent.slice(0,3).map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'先记最近的',
+    miniHtmlA:utilityFocusChips(['先补最容易忘的日期','提醒天数后面再调','先把名字和日期记住'],'先记一个也很好'),
+    miniHintA:'不用一次补齐所有人，先接住最容易忘的那几个。',
+    miniKindB:'day',
+    miniTitleB:'最近这些生日',
+    miniHtmlB:utilityRecentList(recent,'最近还没有生日提醒'),
+    miniHintB:'下面保留原来的真实生日提醒区。',
+    promptKind:'day',
+    promptTitle:'先补一个最容易忘的',
+    promptBody:'生日提醒最重要的是“先记住”，细节可以后面再慢慢补。',
+    promptChips:['先记一个','提醒天数后调']
+  });
+}
+function renderHealthRoute(){
+  const m=appData.menstrual||{};
+  const historyCount=(m.history||[]).length;
+  const cycleDays=Number(m.cycleDays||28);
+  const periodDays=Number(m.periodDays||5);
+  const lastStart=m.lastPeriodStart||'未记录';
+  mountUtilityRoute('healthSection',{
+    shellClass:'v2-health-route-shell',
+    theme:'day',
+    eyebrowKind:'day',
+    eyebrowLabel:'健康闹钟',
+    title:'照顾身体不是插队，是正事',
+    body:'这页更适合做轻一点的身体提醒和周期记录。先让它变得顺手，后面才不会像催命表单。',
+    ringValue:historyCount,
+    ringLabel:'周期记录',
+    progressWidth:Math.min(100,24+historyCount*10),
+    progressText:`周期 ${cycleDays} 天 · 经期 ${periodDays} 天`,
+    cards:[
+      routeCard('detail-icons-v1/icon-battery-cute.png',cycleDays,'周期 / 天'),
+      routeCard('detail-icons-v1/icon-water-cute.png',periodDays,'经期 / 天'),
+      routeCard('ui-icons-collage-v1/icon-alarm.png',m.notifications?'已开':'未开','提醒状态'),
+      routeCard('icons-collage-v2/icon-note.png',lastStart,'最近开始')
+    ],
+    focusHtml:[`周期 ${cycleDays} 天`,`经期 ${periodDays} 天`,m.notifications?'提醒已开启':'提醒未开启'].map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
+    miniKindA:'day',
+    miniTitleA:'先做最需要的',
+    miniHtmlA:utilityFocusChips(['先看提醒有没有开','只改最常用的一项','留一句身体状态'],'先把最关键的一项接住'),
+    miniHintA:'健康提醒要像陪伴，不要像催促。',
+    miniKindB:'day',
+    miniTitleB:'当前记录',
+    miniHtmlB:utilityRecentList([`最近开始：${lastStart}`,`周期：${cycleDays} 天`,`经期：${periodDays} 天`],'还没有健康记录'),
+    miniHintB:'下面保留原来的真实健康模块。',
+    promptKind:'day',
+    promptTitle:'先把身体接住',
+    promptBody:'不用把健康页做得很复杂，先让提醒和记录变轻，后面你才会愿意一直用。',
+    promptChips:['先开提醒','只改一项']
+  });
+}
 function renderGenericSectionRoute(sectionId){
   if(!routeState||!['reviewSection','billSection','healthSection','birthdaySection','extraSection','inspireSection','notesSection','badgeSection','wishSection'].includes(sectionId))return;
+  if(sectionId==='reviewSection')return renderReviewRoute();
+  if(sectionId==='billSection')return renderBillRoute();
+  if(sectionId==='healthSection')return renderHealthRoute();
+  if(sectionId==='birthdaySection')return renderBirthdayRoute();
+  if(sectionId==='extraSection')return renderExtraRoute();
+  if(sectionId==='inspireSection')return renderInspireRoute();
+  if(sectionId==='notesSection')return renderNotesRoute();
+  if(sectionId==='badgeSection')return renderBadgeRoute();
+  if(sectionId==='wishSection')return renderWishRoute();
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById(sectionId);
   if(!body||!section)return;
