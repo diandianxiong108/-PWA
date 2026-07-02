@@ -10,6 +10,8 @@ const monday=value=>{const d=new Date((value||dayKey(new Date()))+'T12:00:00'),n
 const weekEnd=start=>{const d=new Date(start+'T12:00:00');d.setDate(d.getDate()+6);return dayKey(d)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const lifeRhythmLines=appData=>Object.values(appData?.v2?.lifeRhythm?.days||{}).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,5).map(x=>`${x.date}｜${[x.sleepStart&&x.wakeTime?`睡眠${x.sleepStart}-${x.wakeTime}${x.sleepQuality?`(${x.sleepQuality})`:''}`:'',x.energyLevel||'',x.rhythm?`节奏${x.rhythm}`:'',x.control?`掌控感${x.control}`:'',x.completionPercent?`完成${x.completionPercent}%`:'',x.rechargeTags?.length?`补能:${x.rechargeTags.slice(0,2).join('、')}`:'',x.drainTags?.length?`消耗:${x.drainTags.slice(0,2).join('、')}`:'',x.rhythmFactors?.length?`打断:${x.rhythmFactors.slice(0,2).join('、')}`:(x.interrupts?.length?`打断:${x.interrupts.slice(0,2).join('、')}`:''),x.hiddenCosts?.length?`隐形成本:${x.hiddenCosts.slice(0,2).map(i=>i.title).join('、')}`:''].filter(Boolean).join(' · ')}`);
+const eatingLines=appData=>(appData?.v2?.eatingLogs||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,5).map(x=>`${x.date}｜${[x.moment||'时间未写',x.level||'',x.trigger?`诱因:${x.trigger}`:'',x.mood?`心情:${x.mood}`:'',x.note?`备注:${String(x.note).slice(0,36)}`:''].filter(Boolean).join(' · ')}`);
+const lateNightLines=appData=>(appData?.v2?.lateNightLogs||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).slice(0,5).map(x=>`${x.date}｜${[x.bedtime?`入睡:${x.bedtime}`:'时间未写',x.trigger?`原因:${x.trigger}`:'',x.mood?`心情:${x.mood}`:'',x.nextDay?`次日:${x.nextDay}`:'',x.note?`备注:${String(x.note).slice(0,36)}`:''].filter(Boolean).join(' · ')}`);
 
 const userProfile={
   defaults(){return{version:1,preferences:{maxTaskTypesPerDay:3,choresPerDay:1,insertLowResistance:true,proactivePush:true,suggestionTime:'09:00',quietStart:'22:30',quietEnd:'07:30'},principles:'一天不超过三种任务类型；精力低时优先低阻力任务；家务少量穿插；AI建议只能使用普通通知，不能擅自设置重要闹钟。',learnedRules:[],lastAutoWeek:null,createdAt:iso(),updatedAt:iso()}},
@@ -37,6 +39,8 @@ function buildPrompt(appData){userProfile.syncPlanner(appData);const profile=use
   '【用户长期规划底色｜跨对话保留】',profile.principles,
   `约束：每天最多${profile.preferences.maxTaskTypesPerDay}种任务；家务最多${profile.preferences.choresPerDay}项；${profile.preferences.insertLowResistance?'空余时穿插低阻力任务；':''}安静时段${profile.preferences.quietStart}-${profile.preferences.quietEnd}。`,
   lifeRhythmLines(appData).length?`【最近生活能量与节奏】\n${lifeRhythmLines(appData).join('\n')}\n规则：如果用户低电量、熬夜、被打断很多，就减少深度任务，多给短任务、缓冲和恢复建议。`:'',
+  eatingLines(appData).length?`【最近饮食波动】\n${eatingLines(appData).join('\n')}\n规则：如果连续出现暴饮暴食、停不下来、夜晚补偿性进食，要把它视为压力/低电量信号，不要继续把今天排满。`:'',
+  lateNightLines(appData).length?`【最近熬夜节点】\n${lateNightLines(appData).join('\n')}\n规则：如果连续熬夜或凌晨三点后睡，第二天默认降负，只给轻量、低阻力任务。`:'',
   profile.learnedRules.length?'【从采纳/跳过中学到】\n'+profile.learnedRules.map(x=>'- '+x.rule).join('\n'):'',
   weeks.length?'【最近周摘要】\n'+weeks.map(w=>w.text+(w.conversationDigests?.length?'\n对话摘要：'+w.conversationDigests.slice(-1)[0]:'')).join('\n---\n'):'',
   `【反馈总览】采纳${feedback.accepted}次，跳过${feedback.skipped}次。`,

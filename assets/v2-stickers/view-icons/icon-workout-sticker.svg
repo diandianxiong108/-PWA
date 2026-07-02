@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#d8c7ad" flood-opacity=".35"/></filter></defs>
+  <g filter="url(#s)">
+    <path d="M24 28c0-10 8-18 18-18h42c10 0 18 4 24 13l8 13c4 7 4 16 0 22l-8 13c2 4 3 8 3 13 0 15-12 28-28 28H41c-15 0-27-12-27-27V28Z" fill="#fffdf8" stroke="#f3eee3" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <rect x="24" y="54" width="15" height="20" rx="5" fill="#f6c88d" stroke="#d59c64" stroke-width="3"/>
+  <rect x="89" y="54" width="15" height="20" rx="5" fill="#f6c88d" stroke="#d59c64" stroke-width="3"/>
+  <rect x="38" y="58" width="12" height="12" rx="4" fill="#f7a8b8" stroke="#d98398" stroke-width="3"/>
+  <rect x="78" y="58" width="12" height="12" rx="4" fill="#f7a8b8" stroke="#d98398" stroke-width="3"/>
+  <rect x="48" y="60" width="32" height="8" rx="4" fill="#8bb8d4" stroke="#6e95b0" stroke-width="3"/>
+  <path d="M33 88c10-12 20-12 30 0M66 88c10-12 20-12 30 0" fill="none" stroke="#98b87a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="56" cy="37" r="8" fill="#ffe4a9" stroke="#e1b45e" stroke-width="3"/>
+  <path d="M68 32h16M76 24v16" stroke="#e9a07f" stroke-width="4" stroke-linecap="round"/>
+</svg>

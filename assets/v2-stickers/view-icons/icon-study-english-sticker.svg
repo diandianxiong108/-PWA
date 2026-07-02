@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#d8c7ad" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <g filter="url(#s)">
+    <path d="M24 30c0-10 8-18 18-18h44c8 0 14 4 19 10l10 12c5 6 5 16 0 22l-9 10c4 5 6 11 4 18l-4 14c-2 10-10 18-20 18H39c-11 0-19-9-19-19V30Z" fill="#fffdf8"/>
+    <path d="M24 30c0-10 8-18 18-18h44c8 0 14 4 19 10l10 12c5 6 5 16 0 22l-9 10c4 5 6 11 4 18l-4 14c-2 10-10 18-20 18H39c-11 0-19-9-19-19V30Z" fill="none" stroke="#f3eee3" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <rect x="28" y="33" width="72" height="56" rx="12" fill="#f7fbff" stroke="#8cb1d7" stroke-width="3"/>
+  <path d="M64 33v56" stroke="#8cb1d7" stroke-width="3"/>
+  <path d="M37 44h18M37 54h15M37 64h14M72 47l6 5 12-12" stroke="#e69b7d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M74 63h16M74 73h12" stroke="#98b87a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="46" cy="92" r="13" fill="#ffe3a8" stroke="#e5b667" stroke-width="3"/>
+  <path d="M40 92h12M46 86v12" stroke="#cf8e31" stroke-width="3" stroke-linecap="round"/>
+  <path d="M76 92c8-10 16-10 24 0" fill="none" stroke="#90be8a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="84" cy="89" r="3" fill="#f39aac"/>
+</svg>
