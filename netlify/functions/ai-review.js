@@ -26,7 +26,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { tasks, inspirations, notes, period } = JSON.parse(event.body);
+    const { tasks, inspirations, notes, unfinished, eatingLogs, lateNightLogs, period } = JSON.parse(event.body);
 
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
@@ -50,16 +50,29 @@ exports.handler = async (event, context) => {
       `- ${n.date} ${n.text.slice(0, 80)}${n.text.length > 80 ? '...' : ''}`
     ).join('\n');
 
+    const unfinishedSummary = (unfinished || []).map(t =>
+      `- ${t.type || '任务'}：${t.title}`
+    ).join('\n');
+
+    const eatingSummary = (eatingLogs || []).map(x =>
+      `- ${x.date} ${x.moment || ''}｜${x.level || ''}｜诱因:${x.trigger || '未写'}｜心情:${x.mood || '未写'}｜${x.note || ''}`
+    ).join('\n');
+
+    const lateNightSummary = (lateNightLogs || []).map(x =>
+      `- ${x.date} 入睡:${x.bedtime || '未写'}｜原因:${x.trigger || '未写'}｜心情:${x.mood || '未写'}｜次日:${x.nextDay || '未写'}｜${x.note || ''}`
+    ).join('\n');
+
     const systemPrompt = `你是一个温暖贴心的个人成长复盘助手。用朋友般的口吻，根据用户提供的数据生成一份有温度、有洞察的复盘报告。
 
 要求：
 1. 语言温暖、鼓励、具体，像朋友聊天一样自然
-2. 总结周期内任务完成情况和亮点
-3. 观察情绪变化趋势，给正面反馈
-4. 从笔记中发现有价值的信息
+2. 总结周期内任务完成情况、连续推进证据和亮点
+3. 观察情绪变化趋势，不要把挫败感简单归因为懒
+4. 从笔记、饮食波动、熬夜节点中发现压力和恢复线索
 5. 给出1-2个具体的、可执行的建议
 6. 整体篇幅控制在300-500字，段落分明
 7. 不要用评价性语言（"很好"、"不错"），而是描述事实和感受
+8. 如果有未完成事项，重点帮助用户降低挫败感，并给“下一小步”，不要责备
 
 格式：
 先用一个温暖的问候开头，然后分段描述各个维度，最后以鼓励收尾。`;
@@ -73,7 +86,16 @@ ${taskSummary || '（暂无）'}
 ${inspirationSummary || '（暂无）'}
 
 ==随手记==
-${notesSummary || '（暂无）'}`;
+${notesSummary || '（暂无）'}
+
+==未完成/待收尾==
+${unfinishedSummary || '（暂无）'}
+
+==饮食波动==
+${eatingSummary || '（暂无）'}
+
+==熬夜节点==
+${lateNightSummary || '（暂无）'}`;
 
     const response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',

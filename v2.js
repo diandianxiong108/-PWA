@@ -31,9 +31,73 @@ const HOLIDAYS_2026={
   '2026-10-06':'国庆',
   '2026-10-07':'国庆'
 };
+const DEFAULT_CLOUD_ORIGIN='https://soft-douhua-52d678.netlify.app';
+const TASK_CLOUD_ORIGIN_KEY='task-cloud-origin';
 const originalFetch=window.fetch.bind(window);
-window.fetch=function(input,init){const native=window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform();if(native&&typeof input==='string'&&input.startsWith('/.netlify/functions/'))input='https://soft-douhua-52d678.netlify.app'+input;return originalFetch(input,init)};
+function trimCloudOrigin(value){return String(value||'').trim().replace(/\/+$/,'')}
+function configuredCloudOrigin(){
+  const appOrigin=window.appData?.v2?.ai?.cloudOrigin;
+  const savedOrigin=localStorage.getItem(TASK_CLOUD_ORIGIN_KEY)||'';
+  return trimCloudOrigin(appOrigin||savedOrigin)
+}
+function resolveTaskApiUrl(input){
+  if(typeof input!=='string'||!input.startsWith('/.netlify/functions/'))return input;
+  const native=window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform();
+  const origin=configuredCloudOrigin()||(native?DEFAULT_CLOUD_ORIGIN:'');
+  return origin?`${origin}${input}`:input
+}
+window.resolveTaskApiUrl=resolveTaskApiUrl;
+window.fetch=function(input,init){return originalFetch(resolveTaskApiUrl(input),init)};
+var appData=window.appData=window.appData||{};
+var calSelectedDate=window.calSelectedDate||new Date();
+var calWeekOffset=Number(window.calWeekOffset||0);
+var calIsMonth=!!window.calIsMonth;
+var calIsYear=!!window.calIsYear;
+var calTimeSlotView=!!window.calTimeSlotView;
+function localDateKey(value){const d=value instanceof Date?value:new Date(value);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function todayStr(){return localDateKey(new Date())}
+function daysLater(offset=0){const d=new Date();d.setDate(d.getDate()+Number(offset||0));return localDateKey(d)}
+function getWeekDays(offset=0){
+  const base=new Date();
+  base.setHours(12,0,0,0);
+  base.setDate(base.getDate()+Number(offset||0)*7);
+  const monday=new Date(base);
+  const day=monday.getDay()||7;
+  monday.setDate(monday.getDate()-day+1);
+  return Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(monday.getDate()+i);return d})
+}
+function genId(){return`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`}
+function iconImg(label,size=24){const safe=String(label||'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));const px=Number(size)||24;return`<span class="caticon" style="width:${px}px;height:${px}px;display:inline-flex;align-items:center;justify-content:center">${safe}</span>`}
+function renderCalendar(){if(typeof renderCalendarViewBanner==='function')renderCalendarViewBanner();if(typeof decorateCalendarCells==='function')decorateCalendarCells()}
+function renderBills(){}
+function renderReviews(){}
+function renderNotes(){}
+function renderInspirations(){}
+function saveBill(){}
+function render(){
+  if(typeof renderModeUI==='function')renderModeUI();
+  if(typeof renderQuickAddDashboard==='function')renderQuickAddDashboard();
+  if(typeof renderHomeOverviewBoard==='function')renderHomeOverviewBoard();
+  if(typeof renderTaskPoolSection==='function')renderTaskPoolSection();
+  if(typeof renderLifeRhythmSection==='function')renderLifeRhythmSection();
+  if(typeof renderCalendarViewBanner==='function')renderCalendarViewBanner();
+  if(typeof renderFinanceLink==='function')renderFinanceLink();
+  window.HomeV2Shell?.render?.();
+}
+window.todayStr=window.todayStr||todayStr;
+window.daysLater=window.daysLater||daysLater;
+window.getWeekDays=window.getWeekDays||getWeekDays;
+window.genId=window.genId||genId;
+window.iconImg=window.iconImg||iconImg;
+window.loadSprites=window.loadSprites||function(cb){if(typeof cb==='function')cb()};
+window.injectStaticIcons=window.injectStaticIcons||function(){};
+window.render=window.render||render;
+window.renderCalendar=window.renderCalendar||renderCalendar;
 const SECTION_IDS=['dailySection','projectSection','cyclicSection','tempSection','healthSection','birthdaySection','billSection','extraSection','rhythmSection','foodSection','lateNightSection','inspireSection','notesSection','reviewSection','badgeSection','wishSection'];
+const DEFAULT_BILL_CATEGORIES={
+  income:['小红书保研主包','资料收入','咨询收入','兼职','红包','退款','其他收入'],
+  expense:['生活支出','饮食外卖','学习资料','交通','医疗健康','娱乐','日用品','人情往来','其他支出']
+};
 let currentModule='home';
 let selectedDay=todayStr();
 let toastTimer=null;
@@ -51,6 +115,51 @@ function toast(text){let el=document.getElementById('v2Toast');if(!el){el=docume
 window.v2Toast=toast;
 window.openTaskCalendar=openTaskCalendar;
 window.syncTaskReminder=syncTaskReminder;
+
+function daysUntil(iso){
+  if(!iso)return null;
+  const now=new Date(),target=new Date(iso);
+  if(Number.isNaN(target.getTime()))return null;
+  now.setHours(0,0,0,0);
+  target.setHours(0,0,0,0);
+  return Math.round((target-now)/86400000)
+}
+function shouldShowDaily(task={}){
+  const today=todayStr();
+  if(task.startDate&&today<task.startDate)return false;
+  const frequency=String(task.frequency||'每天');
+  const base=new Date((task.startDate||'2026-01-01')+'T12:00:00');
+  const now=new Date(today+'T12:00:00');
+  const diff=Math.max(0,Math.floor((now-base)/86400000));
+  if(/隔天|每2天|两天/.test(frequency))return diff%2===0;
+  if(/每3天|三天/.test(frequency))return diff%3===0;
+  if(/工作日/.test(frequency)){const day=now.getDay();return day>=1&&day<=5}
+  if(/自定义/.test(frequency)&&Array.isArray(task.customDays)){
+    const map=[7,1,2,3,4,5,6];
+    return task.customDays.includes(map[now.getDay()]);
+  }
+  return true
+}
+function getCyclicNext(task={}){
+  if(!task.lastDoneDate)return todayStr();
+  const date=new Date(task.lastDoneDate+'T12:00:00');
+  if(Number.isNaN(date.getTime()))return todayStr();
+  date.setDate(date.getDate()+(Number(task.cycleDays)||1));
+  return dateKey(date)
+}
+function calcTempScore(task={}){
+  let score=(4-(Number(task.priority)||2))*2;
+  if(task.duration)score+=Math.max(0,(60-Number(task.duration))/10);
+  const energy=appData.todayStatus?.energy||'';
+  if(/高|好|😄|😊/.test(energy))score+=3;
+  else if(/低|累|😫|😴/.test(energy))score-=3;
+  const freeTime=appData.todayStatus?.freeTime||'';
+  if(/宽|空|多/.test(freeTime))score+=2;
+  else if(/忙|少|紧/.test(freeTime))score-=3;
+  const due=daysUntil(task.deadline);
+  if(due!==null)score+=due<0?10:(7-due)*3;
+  return score
+}
 
 function defaultV2(){return{
   schemaVersion:2,
@@ -125,8 +234,12 @@ function ensureDataShape(){
   appData.records=appData.records||{categories:{income:[],expense:[]},entries:[]};
   appData.records.entries=Array.isArray(appData.records.entries)?appData.records.entries:[];
   appData.records.categories=appData.records.categories||{income:[],expense:[]};
+  appData.records.categories.income=Array.from(new Set([...(appData.records.categories.income||[]),...DEFAULT_BILL_CATEGORIES.income]));
+  appData.records.categories.expense=Array.from(new Set([...(appData.records.categories.expense||[]),...DEFAULT_BILL_CATEGORIES.expense]));
+  appData.menstrual=Object.assign({cycleDays:28,periodDays:5,lastPeriodStart:null,history:[],notifications:true},appData.menstrual||{});
+  appData.menstrual.history=Array.isArray(appData.menstrual.history)?appData.menstrual.history:[];
 }
-function renderTaskPoolRoute(){
+function legacyRenderTaskPoolRoute(){
   const target=routeState?.kind==='taskPool'?document.getElementById('v2RouteBody'):document.getElementById('taskPoolList');
   if(!target)return;
   const stats=taskPoolDashboardStats(),items=stats.items;
@@ -138,7 +251,7 @@ function renderTaskPoolRoute(){
   target.querySelectorAll('[data-pool-pause]').forEach(btn=>btn.addEventListener('click',()=>toggleTaskPoolPause(btn.dataset.poolPause)));
   target.querySelectorAll('[data-pool-drop]').forEach(btn=>btn.addEventListener('click',()=>dropTaskPoolItem(btn.dataset.poolDrop)));
 }
-function renderDailyRoute(){
+function legacyRenderDailyRoute(){
   if(routeState?.kind!=='daily')return;
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById('dailySection');
@@ -157,7 +270,7 @@ function renderDailyRoute(){
   shell.innerHTML=`<div class="v2-route-overview daily"><div class="v2-route-overview-main"><div>${routeEyebrow('daily','每日任务')}<h3>把每天都要碰的事收整齐，今天只要先完成眼前这几件</h3><p>打勾、最小行动、AI 拆分、时间设置和日历导出都还在。上面这块只是先帮你扫一眼今天的节奏。</p></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>${percent}%</strong><span>今日完成度</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:${percent}%"></span></div><small>${doneCount} 项已完成 · ${Math.max(visibleItems.length-doneCount,0)} 项待处理</small></div></div>${routeDecorPair()}</div><div class="v2-overview-cards">${routeCard('ui-icons-collage-v1/icon-complete-badge.png',doneCount,'今日完成')}${routeCard('icons-collage-v2/icon-daily-task.png',visibleItems.length,'今天显示')}${routeCard('ui-icons-collage-v1/icon-bell.png',restCount,'今天休息')}${routeCard('icons-collage-v2/icon-note.png',splitCount,'已拆最小行动')}</div>${focusItems.length?`<div class="v2-route-overview-focus">${focusItems.map(item=>`<span class="v2-chip">${esc(item.title)}${item.subtask?` · ${esc(item.subtask)}`:''}</span>`).join('')}</div>`:''}</div><div class="v2-route-mini-grid"><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('daily','今天先碰这些')}</h3><div class="v2-mini-list">${focusItems.slice(0,3).map(item=>`<span class="v2-chip active">${esc(item.title)}</span>`).join('')||'<span class="v2-chip">先去下面新增一项</span>'}</div></div><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('daily','小提醒')}</h3><ul class="v2-mini-list"><li>先做最容易开始的一件</li><li>子任务拆短一点更好打勾</li><li>今天休息项不用硬推进</li></ul></div></div>`;
   body.insertBefore(shell,section);
 }
-function renderProjectRoute(){
+function legacyRenderProjectRoute(){
   if(routeState?.kind!=='project')return;
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById('projectSection');
@@ -177,7 +290,7 @@ function renderProjectRoute(){
   body.insertBefore(shell,section);
   document.getElementById('v2ProjectQuickAdd')?.addEventListener('click',()=>{const input=document.getElementById('projectSection-title');input?.focus();input?.scrollIntoView({behavior:'smooth',block:'center'});});
 }
-function renderCyclicRoute(){
+function legacyRenderCyclicRoute(){
   if(routeState?.kind!=='cyclic')return;
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById('cyclicSection');
@@ -193,7 +306,7 @@ function renderCyclicRoute(){
   shell.innerHTML=`<div class="v2-route-overview cyclic"><div class="v2-route-overview-main"><div>${routeEyebrow('cyclic','循环琐事')}<h3>这些事不会自己消失，按节奏收掉就已经很厉害了</h3><p>下面还是你原来的真实循环任务卡。这里先把“今天到期多少、快到期多少、平均周期多少天”提炼出来，省得你一张张翻。</p></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>${items.length}</strong><span>循环任务</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:${items.length?Math.min(100,Math.round(overdueCount/items.length*100)):0}%"></span></div><small>${overdueCount} 项今天该碰 · ${dueSoonCount} 项快到期</small></div></div>${routeMascot('cyclic','is-right')}${routeDecorPair()}</div><div class="v2-overview-cards">${routeCard('ui-icons-collage-v1/icon-alarm.png',overdueCount,'今天到期')}${routeCard('icons-collage-v2/icon-focus.png',dueSoonCount,'两天内到期')}${routeCard('icons-collage-v2/icon-all.png',items.length,'全部循环项')}${routeCard('icons-collage-v2/icon-note.png',avgCycle||0,'平均周期 / 天')}</div></div><div class="v2-route-mini-grid"><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('cyclic','最近该收的')}</h3><div class="v2-mini-list">${soonItems.map(item=>`<span class="v2-chip">${esc(item.title)} · ${esc(fmtDate(getCyclicNext(item)))}</span>`).join('')||'<span class="v2-chip">先在下面加一项循环琐事</span>'}</div></div><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('cyclic','收尾顺序')}</h3><ul class="v2-mini-list"><li>先做今天到期的</li><li>再看两天内会过期的</li><li>没到期的先别给自己加压</li></ul></div></div>`;
   body.insertBefore(shell,section);
 }
-function renderTempRoute(){
+function legacyRenderTempRoute(){
   if(routeState?.kind!=='temp')return;
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById('tempSection');
@@ -210,10 +323,10 @@ function renderTempRoute(){
   shell.innerHTML=`<div class="v2-route-overview temp"><div class="v2-route-overview-main"><div>${routeEyebrow('temp','临时任务')}<h3>先把真的要处理的挑出来，别让所有临时事同时压过来</h3><p>这里继续沿用你现在的优先级、必做、推迟、截止时间和闹钟逻辑。我只是先把最紧急的一层放到上面，减少信息噪音。</p></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>${items.length}</strong><span>临时事项</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:${items.length?Math.round((urgentCount/items.length)*100):0}%"></span></div><small>${urgentCount} 项紧急 · ${pinnedCount} 项标记必做</small></div></div>${routeDecorPair()}</div><div class="v2-overview-cards">${routeCard('icons-collage-v2/icon-pomodoro.png',pinnedCount,'必做')}${routeCard('ui-icons-collage-v1/icon-alarm.png',urgentCount,'紧急 / 截止近')}${routeCard('icons-collage-v2/icon-note.png',deadlineCount,'已设截止时间')}${routeCard('ui-icons-collage-v1/icon-complete-badge.png',doneCount,'已完成')}</div>${smartTop.length?`<div class="v2-route-overview-focus">${smartTop.map(item=>`<span class="v2-chip">${item.pinned?'📌 ':''}${esc(item.title)}</span>`).join('')}</div>`:''}</div><div class="v2-route-mini-grid"><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('temp','先看这几条')}</h3><div class="v2-mini-list">${smartTop.map(item=>`<span class="v2-chip ${item.pinned?'active':''}">${item.pinned?'📌 ':''}${esc(item.title)}</span>`).join('')||'<span class="v2-chip">今天临时任务不多</span>'}</div></div><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('temp','减压规则')}</h3><div class="v2-mini-chip-grid"><span class="v2-chip">先做必做项</span><span class="v2-chip">能延期就别硬塞</span><span class="v2-chip">太碎的先扔回任务池</span></div></div></div>`;
   body.insertBefore(shell,section);
 }
-window.renderDailyRouteShell=renderDailyRoute;
-window.renderProjectRouteShell=renderProjectRoute;
-window.renderCyclicRouteShell=renderCyclicRoute;
-window.renderTempRouteShell=renderTempRoute;
+window.renderDailyRouteShell=legacyRenderDailyRoute;
+window.renderProjectRouteShell=legacyRenderProjectRoute;
+window.renderCyclicRouteShell=legacyRenderCyclicRoute;
+window.renderTempRouteShell=legacyRenderTempRoute;
 function renderLifeRhythmRoute(){
   const target=routeState?.kind==='rhythm'?document.getElementById('v2RouteBody'):document.getElementById('rhythmList');
   if(!target)return;
@@ -476,6 +589,16 @@ function renderHomeOverviewBoard(){
 function persist(){
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify(appData));return true}catch(e){toast('本地保存失败，请导出备份');return false}
 }
+function addTask(task){
+  if(!task||typeof task!=='object')return null;
+  task.id=task.id||genId();
+  appData.tasks=Array.isArray(appData.tasks)?appData.tasks:[];
+  appData.tasks.push(task);
+  persist();
+  render();
+  return task
+}
+window.addTask=window.addTask||addTask;
 function esc(value){return String(value??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]))}
 function stickerAsset(path){return `${V2_STICKER_BASE}${path}`}
 const ROUTE_ART={
@@ -573,418 +696,253 @@ const GENERIC_ROUTE_COPY={
   wish:{title:'愿望基金慢慢攒，也会有力量',body:'这里不用天天盯，只要偶尔回来看看，目标就会更具体。',focus:['先看当前目标','收入到了再补','保持一点期待']},
   default:{title:'这一页也可以是温柔的工作台',body:'逻辑不动，我们只是把它整理成更顺手、更好扫一眼的样子。',focus:['先看最上面摘要','再做一个小动作','剩下的慢慢来']}
 };
-function recentItems(list,limit=4){
-  return(list||[]).slice().sort((a,b)=>String(b.createdAt||b.earnedAt||b.date||'').localeCompare(String(a.createdAt||a.earnedAt||a.date||''))).slice(0,limit)
+function renderPracticalRouteTop(sectionId){
+  if(sectionId==='billSection')return renderBillPracticalTop();
+  if(sectionId==='wishSection')return renderWishPracticalTop();
+  if(sectionId==='healthSection')return renderHealthPracticalTop();
+  if(sectionId==='reviewSection')return renderReviewPracticalTop();
+  if(sectionId==='inspireSection')return renderTextPracticalTop('inspire');
+  if(sectionId==='notesSection')return renderTextPracticalTop('notes');
+  return '';
 }
-function prepareUtilityRouteShell(sectionId,shellClass='v2-generic-route-shell'){
-  if(!routeState)return null;
-  const body=document.getElementById('v2RouteBody');
-  const section=document.getElementById(sectionId);
-  if(!body||!section)return null;
-  body.querySelector(`.${shellClass}`)?.remove();
-  return{body,section}
-}
-function utilityFocusChips(items,emptyText='慢慢补也来得及'){
-  return items.length?items.map(text=>`<span class="v2-chip active">${esc(text)}</span>`).join(''):`<span class="v2-chip">${esc(emptyText)}</span>`
-}
-function utilityRecentList(items,emptyText='这一页还没有内容'){
-  return items.length?items.map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''):`<span class="v2-chip">${esc(emptyText)}</span>`
-}
-function mountUtilityRoute(sectionId,options){
-  const prepared=prepareUtilityRouteShell(sectionId,options.shellClass||'v2-generic-route-shell');
-  if(!prepared)return;
-  const {body,section}=prepared;
-  const shell=document.createElement('div');
-  shell.className=options.shellClass||'v2-generic-route-shell';
-  shell.innerHTML=`
-    <div class="v2-route-overview ${options.theme||'day'} v2-route-journal">
-      <div class="v2-route-overview-main">
-        <div>
-          ${routeEyebrow(options.eyebrowKind||'day',options.eyebrowLabel||HOME_ROUTES[sectionId]?.[0]||'模块整理')}
-          <h3>${esc(options.title)}</h3>
-          <p>${esc(options.body)}</p>
-        </div>
-        <div class="v2-route-overview-progress">
-          <div class="v2-overview-ring"><strong>${esc(options.ringValue)}</strong><span>${esc(options.ringLabel)}</span></div>
-          <div class="v2-overview-bar">
-            <div class="v2-overview-bar-track"><span style="width:${Number(options.progressWidth)||36}%"></span></div>
-            <small>${esc(options.progressText)}</small>
-          </div>
-        </div>
-        ${routeDecorPair()}
-      </div>
-      <div class="v2-overview-cards">${options.cards.join('')}</div>
-      ${options.focusHtml?`<div class="v2-route-overview-focus">${options.focusHtml}</div>`:''}
+function renderBillPracticalTop(){
+  const entries=appData.records?.entries||[];
+  const now=new Date(),month=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthEntries=entries.filter(e=>String(e.date||'').startsWith(month));
+  const totalIncome=entries.filter(e=>e.type==='income').reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const totalExpense=entries.filter(e=>e.type==='expense').reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const income=monthEntries.filter(e=>e.type==='income').reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const expense=monthEntries.filter(e=>e.type==='expense').reduce((sum,e)=>sum+Number(e.amount||0),0);
+  const recent=entries.slice().sort((a,b)=>String(b.createdAt||b.date||'').localeCompare(String(a.createdAt||a.date||''))).slice(0,4);
+  const incomeOptions=(appData.records?.categories?.income||DEFAULT_BILL_CATEGORIES.income).map(x=>`<option value="${esc(x)}"></option>`).join('');
+  const expenseOptions=(appData.records?.categories?.expense||DEFAULT_BILL_CATEGORIES.expense).map(x=>`<option value="${esc(x)}"></option>`).join('');
+  return `<div class="v2-practical-route v2-practical-bill">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('project','低阻力记账')}<h3>先记一笔，分类之后再慢慢修</h3><p class="hint">收入、支出、退款都放在第一屏，不用往下找旧表单。</p></div>
+      <div class="v2-practical-total"><strong>${(income-expense).toFixed(0)}</strong><span>本月结余</span></div>
     </div>
-    <div class="v2-route-mini-grid">
-      <div class="v2-panel v2-mini-note">
-        <h3>${routeMiniTitle(options.miniKindA||options.eyebrowKind||'day',options.miniTitleA||'先看这里')}</h3>
-        <div class="v2-mini-list">${options.miniHtmlA||''}</div>
-        ${options.miniHintA?`<p class="hint" style="margin-top:10px">${esc(options.miniHintA)}</p>`:''}
-      </div>
-      <div class="v2-panel v2-mini-note">
-        <h3>${routeMiniTitle(options.miniKindB||options.eyebrowKind||'day',options.miniTitleB||'最近内容')}</h3>
-        <div class="v2-mini-list">${options.miniHtmlB||''}</div>
-        ${options.miniHintB?`<p class="hint" style="margin-top:10px">${esc(options.miniHintB)}</p>`:''}
-      </div>
+    <div class="v2-practical-stats"><span>本月 +${income.toFixed(0)} / -${expense.toFixed(0)}</span><span>累计 ${(totalIncome-totalExpense).toFixed(0)}</span><span>${entries.length} 笔记录</span></div>
+    <div class="v2-practical-form">
+      <select id="v2QuickBillType"><option value="expense">支出</option><option value="income">收入</option><option value="refund">退款</option></select>
+      <input id="v2QuickBillAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="金额">
+      <input id="v2QuickBillCategory" list="v2QuickBillCategoryList" placeholder="分类，如小红书保研主包/生活支出">
+      <datalist id="v2QuickBillCategoryList">${expenseOptions}${incomeOptions}</datalist>
+      <input id="v2QuickBillNote" placeholder="备注可不填">
+      <button class="v2-primary" id="v2QuickBillSave">记下来</button>
     </div>
-    ${routePromptCard(options.promptKind||options.eyebrowKind||'day',options.promptTitle||'先从一小步开始',options.promptBody||options.body,options.promptChips||[])}
-  `;
-  body.insertBefore(shell,section);
+    <div class="v2-practical-recent">${recent.length?recent.map(e=>`<span>${esc(e.type==='income'?'+':'-')}${Number(e.amount||0).toFixed(0)} · ${esc(e.category||'未分类')}</span>`).join(''):'<span>还没有记录，先记第一笔就好。</span>'}</div>
+  </div>`;
 }
-function renderBillRoute(){
-  const entries=(appData.records?.entries||[]);
-  const month=todayStr().slice(0,7);
+function renderWishPracticalTop(){
+  const wishes=appData.wishes||[],link=appData.v2?.financeLink||{};
+  const total=wishes.reduce((sum,w)=>sum+Number(w.currentAmount||0),0);
+  const target=wishes.reduce((sum,w)=>sum+Number(w.targetAmount||0),0);
+  const current=wishes[0];
+  return `<div class="v2-practical-route v2-practical-wish">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('project','愿望基金')}<h3>目标先放这里，收入到了再慢慢归集</h3><p class="hint">小红书保研主包这类收入可以自动计入你选择的目标。</p></div>
+      <div class="v2-practical-total"><strong>${target?Math.round(total/target*100):0}%</strong><span>总进度</span></div>
+    </div>
+    <div class="v2-practical-stats"><span>已攒 ${total.toFixed(0)}</span><span>目标 ${target.toFixed(0)}</span><span>${wishes.length} 个愿望</span></div>
+    <div class="v2-practical-form">
+      <input id="v2WishTitle" placeholder="愿望名，如：保研主包收入池">
+      <input id="v2WishTarget" type="number" min="0" inputmode="decimal" placeholder="目标金额">
+      <button class="v2-primary" id="v2WishAdd">新增目标</button>
+    </div>
+    <div class="v2-practical-form">
+      <select id="v2WishPick">${wishes.map(w=>`<option value="${esc(w.id)}" ${w.id===link.wishId?'selected':''}>${esc(w.title)}</option>`).join('')}</select>
+      <input id="v2WishAmount" type="number" min="0" inputmode="decimal" placeholder="存入金额">
+      <button class="v2-secondary" id="v2WishSaveAmount">存一笔</button>
+      <button class="v2-secondary" id="v2WishLink">设为主包归集</button>
+    </div>
+    <div class="v2-practical-recent">${current?`<span>当前：${esc(current.title)} · ${Number(current.currentAmount||0).toFixed(0)} / ${Number(current.targetAmount||0).toFixed(0)}</span>`:'<span>还没有愿望目标，先建一个就好。</span>'}</div>
+  </div>`;
+}
+function renderHealthPracticalTop(){
+  const m=appData.menstrual||{cycleDays:28,periodDays:5,lastPeriodStart:null,history:[],notifications:true};
   const today=todayStr();
-  const todayEntries=entries.filter(x=>x.date===today);
-  const monthEntries=entries.filter(x=>String(x.date||'').startsWith(month));
-  const income=monthEntries.filter(x=>x.type==='income').reduce((sum,x)=>sum+Number(x.amount||0),0);
-  const expense=monthEntries.filter(x=>x.type==='expense').reduce((sum,x)=>sum+Number(x.amount||0),0);
-  const cats=new Set(monthEntries.map(x=>x.category).filter(Boolean));
-  const recent=recentItems(entries,4).map(item=>`${item.category||'未分类'} · ${item.type==='income'?'+':'-'}${item.amount||0}`);
-  mountUtilityRoute('billSection',{
-    shellClass:'v2-bill-route-shell',
-    theme:'project',
-    eyebrowKind:'project',
-    eyebrowLabel:'账单',
-    title:'每一笔都轻轻记下来，心里会更稳',
-    body:'这里保留你原来的真实记账逻辑。上面只负责把本月收支和最近几笔提炼出来，让你不用进来就先看长列表。',
-    ringValue:monthEntries.length,
-    ringLabel:'本月记录',
-    progressWidth:Math.min(100,28+monthEntries.length*8),
-    progressText:`收入 ${income.toFixed(1)} · 支出 ${expense.toFixed(1)}`,
-    cards:[
-      routeCard('detail-icons-v1/icon-receipt-cute.png',`+${income.toFixed(1)}`,'本月收入'),
-      routeCard('detail-icons-v1/icon-receipt-cute.png',`-${expense.toFixed(1)}`,'本月支出'),
-      routeCard('icons-collage-v2/icon-daily-task.png',todayEntries.length,'今天记了几笔'),
-      routeCard('icons-collage-v2/icon-all.png',cats.size,'本月分类数')
-    ],
-    focusHtml:todayEntries.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.category||'未分类')} · ${item.type==='income'?'+':'-'}${esc(item.amount||0)}</span>`).join(''),
-    miniKindA:'project',
-    miniTitleA:'先记今天',
-    miniHtmlA:utilityFocusChips(['先补今天支出','收入单独记','分类不确定先随手记'],'今天还没记账也没关系'),
-    miniHintA:'不用一下补齐一整个月，先接住今天发生的这几笔就好。',
-    miniKindB:'project',
-    miniTitleB:'最近几笔',
-    miniHtmlB:utilityRecentList(recent,'最近还没有账单记录'),
-    miniHintB:'下面保留的是原来的真实账单模块。',
-    promptKind:'project',
-    promptTitle:'先记第一笔',
-    promptBody:'你不需要一次把账本整理得很完美，先把今天发生的那一笔写下来，后面复盘就会轻松很多。',
-    promptChips:['先记支出','收入单独记']
-  });
+  let cycleText='还没设置开始日';
+  if(m.lastPeriodStart){
+    const days=Math.max(0,Math.floor((new Date(today+'T12:00:00')-new Date(m.lastPeriodStart+'T12:00:00'))/86400000));
+    const dayInCycle=days%(Number(m.cycleDays)||28);
+    cycleText=dayInCycle<Number(m.periodDays||5)?`经期第 ${dayInCycle+1} 天`:`周期第 ${dayInCycle+1} 天`;
+  }
+  return `<div class="v2-practical-route v2-practical-health">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('rhythm','周期健康')}<h3>周期也会影响任务密度，先把日期设清楚</h3><p class="hint">AI 安排今天时会参考这里，不需要你每次重新解释身体状态。</p></div>
+      <div class="v2-practical-total"><strong>${esc(cycleText)}</strong><span>当前状态</span></div>
+    </div>
+    <div class="v2-practical-stats"><span>周期 ${m.cycleDays||28} 天</span><span>经期 ${m.periodDays||5} 天</span><span>历史 ${Array.isArray(m.history)?m.history.length:0} 次</span></div>
+    <div class="v2-practical-form">
+      <input id="v2PeriodStart" type="date" value="${esc(m.lastPeriodStart||today)}">
+      <input id="v2PeriodCycle" type="number" min="15" max="60" value="${Number(m.cycleDays)||28}" placeholder="周期天数">
+      <input id="v2PeriodDays" type="number" min="1" max="15" value="${Number(m.periodDays)||5}" placeholder="经期天数">
+      <button class="v2-primary" id="v2PeriodSave">保存设置</button>
+    </div>
+    <div class="v2-practical-actions">
+      <button class="v2-secondary" id="v2PeriodStartToday">记录今天开始</button>
+      <button class="v2-secondary" id="v2PeriodEndToday">记录今天结束</button>
+    </div>
+  </div>`;
 }
-function renderExtraRoute(){
-  const extras=(appData.notes||[]).filter(x=>x.done||x.title==='额外完成');
-  const todayExtras=extras.filter(x=>x.date===todayStr());
-  const recent=recentItems(extras,4).map(item=>(item.text||item.title||'额外完成').slice(0,22));
-  mountUtilityRoute('extraSection',{
-    shellClass:'v2-extra-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'额外完成',
-    title:'没排进去但做掉的，也值得被认真看见',
-    body:'这一页不是任务后台，而是把那些计划外却真实消耗了你时间和精力的完成记录接住。AI 后面复盘也会参考这里。',
-    ringValue:todayExtras.length,
-    ringLabel:'今日额外完成',
-    progressWidth:Math.min(100,34+todayExtras.length*18),
-    progressText:`累计 ${extras.length} 条额外完成记录`,
-    cards:[
-      routeCard('ui-icons-collage-v1/icon-complete-badge.png',todayExtras.length,'今天额外完成'),
-      routeCard('icons-collage-v2/icon-note.png',extras.length,'累计记录'),
-      routeCard('detail-icons-v1/icon-mood-cute.png',recent.length,'最近可回看'),
-      routeCard('icons-collage-v2/icon-ai-review.png',(appData.v2?.smartCapture?.uploadLog||[]).length,'可进复盘素材')
-    ],
-    focusHtml:todayExtras.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.text||item.title||'额外完成').slice(0,18))}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'怎么记更轻',
-    miniHtmlA:utilityFocusChips(['先写一句今天多做了什么','不用整理成很正式','后面再交给 AI'],'先记一句也有价值'),
-    miniHintA:'额外完成本来就常常是碎的，先留下痕迹最重要。',
-    miniKindB:'day',
-    miniTitleB:'最近这些',
-    miniHtmlB:utilityRecentList(recent,'最近还没有额外完成记录'),
-    miniHintB:'下面还是原来的真实额外完成区。',
-    promptKind:'day',
-    promptTitle:'先记一句今天多做了什么',
-    promptBody:'那些没排进计划却做掉的事，往往最能解释你为什么会累，也最值得被复盘看见。',
-    promptChips:['先写一句','后面再让 AI 整理']
-  });
+function renderReviewPracticalTop(){
+  const reviews=(appData.reviews||[]).slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const latest=reviews[0];
+  return `<div class="v2-practical-route v2-practical-review">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('planner','AI复盘')}<h3>先看最近结论，再决定要不要生成新的</h3><p class="hint">复盘不是审判，是把最近做过的事、状态和线索捞回来。</p></div>
+      <div class="v2-practical-total"><strong>${reviews.length}</strong><span>份复盘</span></div>
+    </div>
+    <div class="v2-practical-review-card">
+      ${latest?`<strong>${esc(latest.period||'最近复盘')}</strong><p>${esc(String(latest.report||'').slice(0,220))}${String(latest.report||'').length>220?'...':''}</p><small>${esc(latest.startDate||'')} ${latest.endDate?`~ ${esc(latest.endDate)}`:''}</small>`:'<strong>还没有复盘</strong><p>可以先生成本周复盘。内容少也没关系，它会先帮你捞出线索。</p>'}
+    </div>
+    <div class="v2-practical-actions">
+      <button class="v2-primary" data-v2-review-now="week">生成本周</button>
+      <button class="v2-secondary" data-v2-review-now="month">生成本月</button>
+      <button class="v2-secondary" data-v2-review-now="quarter">生成本季度</button>
+      <button class="v2-secondary" data-v2-review-now="year">生成今年</button>
+    </div>
+    <textarea id="v2ReviewMaterial" class="v2-practical-textarea" rows="2" placeholder="临时复盘素材：今天卡住了什么、做成了什么、想保留什么..."></textarea>
+    <div class="v2-row end" style="margin-top:8px"><button class="v2-secondary" id="v2SaveReviewMaterial">保存为复盘素材</button></div>
+  </div>`;
 }
-function renderInspireRoute(){
-  const items=appData.inspirations||[];
-  const todayItems=items.filter(x=>x.date===todayStr());
-  const moods=new Set(items.map(x=>x.emotion).filter(Boolean));
-  const recent=recentItems(items,4).map(item=>(item.text||'灵感').slice(0,24));
-  mountUtilityRoute('inspireSection',{
-    shellClass:'v2-inspire-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'灵感便签',
-    title:'灵感先收住，别让它一下就跑了',
-    body:'这里更像你的贴纸便签页。想到一句、冒出一个点子、突然有点想法，都先收进来，不用马上整理成任务。',
-    ringValue:todayItems.length,
-    ringLabel:'今日灵感',
-    progressWidth:Math.min(100,32+todayItems.length*16),
-    progressText:`共 ${items.length} 条灵感 · ${moods.size} 种情绪标签`,
-    cards:[
-      routeCard('icons-collage-v2/icon-note.png',todayItems.length,'今天写下'),
-      routeCard('detail-icons-v1/icon-mood-cute.png',moods.size,'情绪标签'),
-      routeCard('icons-collage-v2/icon-ai-review.png',items.filter(x=>x.source==='ocr').length,'拍照录入'),
-      routeCard('icons-collage-v2/icon-all.png',items.length,'累计便签')
-    ],
-    focusHtml:todayItems.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.text||'灵感').slice(0,16))}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'现在先记',
-    miniHtmlA:utilityFocusChips(['先写一句闪过的话','重要的可以钉住','不急着改成任务'],'空白也没关系'),
-    miniHintA:'灵感的第一版通常都很碎，先收住它就已经很好了。',
-    miniKindB:'day',
-    miniTitleB:'最近火花',
-    miniHtmlB:utilityRecentList(recent,'最近还没有灵感便签'),
-    miniHintB:'下面保留原来的真实灵感板块。',
-    promptKind:'day',
-    promptTitle:'先写下一句',
-    promptBody:'灵感最怕“先等等”，先贴下来，后面再决定它是提醒、想法还是任务。',
-    promptChips:['先写一句','不急着整理']
-  });
+function renderTextPracticalTop(kind){
+  const isIdea=kind==='inspire';
+  const items=isIdea?(appData.inspirations||[]):(appData.notes||[]);
+  const latest=items[0];
+  return `<div class="v2-practical-route">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('day',isIdea?'灵感便签':'随手记')}<h3>${isIdea?'一闪而过的想法先收住':'脑子太满的时候先放下来'}</h3><p class="hint">不用整理成正式文字，一句话也可以。</p></div>
+      <div class="v2-practical-total"><strong>${items.length}</strong><span>${isIdea?'条灵感':'条笔记'}</span></div>
+    </div>
+    <textarea id="${isIdea?'v2QuickIdeaText':'v2QuickNoteText'}" class="v2-practical-textarea" rows="3" placeholder="${isIdea?'刚刚冒出来的想法、句子、项目灵感...':'随手记一点：备忘、吐槽、素材、待整理内容...'}"></textarea>
+    <div class="v2-practical-actions"><button class="v2-primary" id="${isIdea?'v2QuickIdeaSave':'v2QuickNoteSave'}">${isIdea?'存为灵感':'存为随手记'}</button></div>
+    <div class="v2-practical-recent">${latest?`<span>最近：${esc((latest.text||latest.title||'').slice(0,80))}</span>`:'<span>还没有内容，先写一句就好。</span>'}</div>
+  </div>`;
 }
-function renderNotesRoute(){
-  const items=appData.notes||[];
-  const todayItems=items.filter(x=>x.date===todayStr()&&!x.done);
-  const ocrCount=items.filter(x=>x.source==='ocr'||x.title==='手写识别').length;
-  const recent=recentItems(items,4).map(item=>(item.title||item.text||'随手记').slice(0,22));
-  mountUtilityRoute('notesSection',{
-    shellClass:'v2-notes-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'随手记',
-    title:'脑子里的碎片先放下来，今天就会轻很多',
-    body:'这页保留你的随手记和拍照识别逻辑。上面只是把“今天写了多少、最近有什么、拍照识别用了几次”收成更顺眼的一层。',
-    ringValue:todayItems.length,
-    ringLabel:'今日随记',
-    progressWidth:Math.min(100,28+todayItems.length*18),
-    progressText:`累计 ${items.length} 条随记 · 识别录入 ${ocrCount} 条`,
-    cards:[
-      routeCard('icons-collage-v2/icon-note.png',todayItems.length,'今天写下'),
-      routeCard('detail-icons-v1/icon-book-cute.png',items.length,'累计随记'),
-      routeCard('icons-collage-v2/icon-all.png',ocrCount,'拍照识别'),
-      routeCard('detail-icons-v1/icon-mood-cute.png',items.filter(x=>x.done).length,'已整理 / 已完成')
-    ],
-    focusHtml:todayItems.slice(0,3).map(item=>`<span class="v2-chip">${esc((item.title||item.text||'随手记').slice(0,16))}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'轻一点记',
-    miniHtmlA:utilityFocusChips(['先写标题或一句话','有图就直接识别','之后再慢慢整理'],'今天还没写也没关系'),
-    miniHintA:'这页不要求你写得完整，先把脑子里的东西放下来就行。',
-    miniKindB:'day',
-    miniTitleB:'最近这些',
-    miniHtmlB:utilityRecentList(recent,'最近还没有随手记'),
-    miniHintB:'下面就是你原来的真实随手记和 OCR 区。',
-    promptKind:'day',
-    promptTitle:'先写一个片段',
-    promptBody:'随手记本来就是缓冲区，不用一开始就想清楚结构，先放下来再说。',
-    promptChips:['先写一句','有图就识别']
-  });
+function bindPracticalRouteTop(sectionId){
+  if(sectionId==='billSection'){
+    document.getElementById('v2QuickBillSave')?.addEventListener('click',savePracticalBill);
+    document.getElementById('v2QuickBillType')?.addEventListener('change',updateQuickBillPlaceholder);
+  }
+  if(sectionId==='wishSection'){
+    document.getElementById('v2WishAdd')?.addEventListener('click',addPracticalWish);
+    document.getElementById('v2WishSaveAmount')?.addEventListener('click',savePracticalWishAmount);
+    document.getElementById('v2WishLink')?.addEventListener('click',savePracticalWishLink);
+  }
+  if(sectionId==='healthSection'){
+    document.getElementById('v2PeriodSave')?.addEventListener('click',savePracticalPeriodSettings);
+    document.getElementById('v2PeriodStartToday')?.addEventListener('click',()=>recordPracticalPeriodStart(todayStr()));
+    document.getElementById('v2PeriodEndToday')?.addEventListener('click',()=>recordPracticalPeriodEnd(todayStr()));
+  }
+  if(sectionId==='reviewSection'){
+    document.querySelectorAll('[data-v2-review-now]').forEach(btn=>btn.addEventListener('click',()=>generatePeriodReview(btn.dataset.v2ReviewNow,{completedOnly:false})));
+    document.getElementById('v2SaveReviewMaterial')?.addEventListener('click',saveReviewMaterial);
+  }
+  if(sectionId==='inspireSection')document.getElementById('v2QuickIdeaSave')?.addEventListener('click',()=>savePracticalText('inspire'));
+  if(sectionId==='notesSection')document.getElementById('v2QuickNoteSave')?.addEventListener('click',()=>savePracticalText('notes'));
 }
-function renderReviewRoute(){
-  const reviews=appData.reviews||[];
-  const payload=buildReviewSourceRange('week');
-  const sourceCount=(payload.tasks?.length||0)+(payload.inspirations?.length||0)+(payload.notes?.length||0)+(payload.eatingLogs?.length||0)+(payload.lateNightLogs?.length||0);
-  const recent=recentItems(reviews,4).map(item=>(item.title||item.summary||'复盘').slice(0,22));
-  mountUtilityRoute('reviewSection',{
-    shellClass:'v2-review-route-shell',
-    theme:'planner',
-    eyebrowKind:'planner',
-    eyebrowLabel:'AI复盘',
-    title:'复盘不是审判，是把线索慢慢收回来',
-    body:'这里适合看完成、状态、灵感、饮食波动和熬夜节点。AI 不是来评判，而是帮你看出最近到底卡在哪里。',
-    ringValue:reviews.length,
-    ringLabel:'已存复盘',
-    progressWidth:Math.min(100,24+sourceCount*4),
-    progressText:`当前可复盘素材 ${sourceCount} 条`,
-    cards:[
-      routeCard('icons-collage-v2/icon-ai-review.png',reviews.length,'已有复盘'),
-      routeCard('ui-icons-collage-v1/icon-complete-badge.png',payload.tasks.length,'完成事项'),
-      routeCard('detail-icons-v1/icon-mood-cute.png',payload.inspirations.length+payload.notes.length,'灵感 / 随记'),
-      routeCard('detail-icons-v1/icon-sleep-cute.png',payload.eatingLogs.length+payload.lateNightLogs.length,'饮食 / 熬夜')
-    ],
-    focusHtml:[`完成 ${payload.tasks.length} 条`,`随记 ${payload.notes.length} 条`,`灵感 ${payload.inspirations.length} 条`].map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
-    miniKindA:'planner',
-    miniTitleA:'先看这些线索',
-    miniHtmlA:utilityFocusChips(['先看最近完成','再看状态和情绪','最后看饮食和熬夜'],'素材还会慢慢累起来'),
-    miniHintA:'复盘素材越真实，AI 后面给你的建议才会越贴身。',
-    miniKindB:'planner',
-    miniTitleB:'最近复盘',
-    miniHtmlB:utilityRecentList(recent,'最近还没有保存过 AI 复盘'),
-    miniHintB:'下面保留原来的真实复盘区。',
-    promptKind:'planner',
-    promptTitle:'先复盘这一周',
-    promptBody:'不用等一切都整理完再复盘，先看这一周最明显的节奏变化，已经足够有帮助。',
-    promptChips:['先看最近 7 天','状态和完成一起看']
-  });
+function updateQuickBillPlaceholder(){
+  const type=document.getElementById('v2QuickBillType')?.value||'expense';
+  const input=document.getElementById('v2QuickBillCategory');
+  if(input)input.placeholder=type==='income'?'分类，如小红书保研主包/资料收入':type==='refund'?'分类，如退款':'分类，如生活支出/饮食外卖';
 }
-function renderBadgeRoute(){
-  const items=appData.badges||[];
-  const month=todayStr().slice(0,7);
-  const monthItems=items.filter(x=>String(x.earnedAt||'').startsWith(month));
-  const recent=recentItems(items,4).map(item=>item.title||'成就勋章');
-  mountUtilityRoute('badgeSection',{
-    shellClass:'v2-badge-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'成就勋章',
-    title:'一点点成就也值得被点亮',
-    body:'勋章页不是炫耀，而是让你偶尔抬头看见：原来你已经做成过这么多件事了。',
-    ringValue:items.length,
-    ringLabel:'已点亮',
-    progressWidth:Math.min(100,30+items.length*8),
-    progressText:`本月新增 ${monthItems.length} 枚`,
-    cards:[
-      routeCard('icons-collage-v2/icon-all.png',items.length,'累计勋章'),
-      routeCard('ui-icons-collage-v1/icon-complete-badge.png',monthItems.length,'本月点亮'),
-      routeCard('detail-icons-v1/icon-book-cute.png',recent.length,'最近可回看'),
-      routeCard('icons-collage-v2/icon-ai-review.png',appData.stars||0,'星级累计')
-    ],
-    focusHtml:monthItems.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.title||'成就勋章')}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'这一页怎么看',
-    miniHtmlA:utilityFocusChips(['先看最近点亮的','空的时候回来看看','把走过的路看见'],'这页会慢慢变亮'),
-    miniHintA:'被自己看见，也是一种很重要的补能。',
-    miniKindB:'day',
-    miniTitleB:'最近点亮',
-    miniHtmlB:utilityRecentList(recent,'最近还没有勋章记录'),
-    miniHintB:'下面仍然是原来的真实勋章列表。',
-    promptKind:'day',
-    promptTitle:'先看最近的一枚',
-    promptBody:'不用追着刷成就，偶尔回来看看自己已经做到过什么，就已经很有力量。',
-    promptChips:['先看最近一枚','慢慢点亮']
-  });
+function savePracticalBill(){
+  const amount=Number(document.getElementById('v2QuickBillAmount')?.value||0);
+  const rawType=document.getElementById('v2QuickBillType')?.value||'expense';
+  let category=document.getElementById('v2QuickBillCategory')?.value.trim()||'';
+  const note=document.getElementById('v2QuickBillNote')?.value.trim()||'';
+  if(!amount||amount<=0){toast('先填金额');return}
+  appData.records=appData.records||{entries:[],categories:{income:['收入'],expense:['餐饮','交通','购物','其他']}};
+  appData.records.entries=Array.isArray(appData.records.entries)?appData.records.entries:[];
+  const type=rawType==='refund'?'income':rawType;
+  category=category||(rawType==='refund'?'退款':type==='income'?'收入':'其他');
+  const entry={id:genId(),date:todayStr(),type,category,amount,note,createdAt:nowISO(),source:'quick-route'};
+  appData.records.entries.push(entry);
+  const catType=type==='income'?'income':'expense';
+  appData.records.categories=appData.records.categories||{income:[],expense:[]};
+  appData.records.categories[catType]=Array.from(new Set([...(appData.records.categories[catType]||[]),category]));
+  linkFinanceEntry(entry);
+  persist();renderBills?.();renderGenericSectionRoute('billSection');
+  toast(rawType==='refund'?'退款已记下':type==='income'?'收入已记下':'支出已记下');
 }
-function renderWishRoute(){
-  const items=appData.wishes||[];
-  const totalCurrent=items.reduce((sum,x)=>sum+Number(x.currentAmount||0),0);
-  const totalTarget=items.reduce((sum,x)=>sum+Number(x.targetAmount||0),0);
-  const percent=totalTarget?Math.min(100,Math.round(totalCurrent/totalTarget*100)):0;
-  const recent=recentItems(items,4).map(item=>`${item.title||'愿望'} · ${Number(item.currentAmount||0)}/${Number(item.targetAmount||0)}`);
-  mountUtilityRoute('wishSection',{
-    shellClass:'v2-wish-route-shell',
-    theme:'project',
-    eyebrowKind:'project',
-    eyebrowLabel:'愿望基金',
-    title:'愿望基金慢慢攒，也会有力量',
-    body:'这里不用天天盯着冲。偶尔回来看看，目标有没有更近一点，就已经很够了。',
-    ringValue:`${percent}%`,
-    ringLabel:'整体进度',
-    progressWidth:percent||18,
-    progressText:`已攒 ${totalCurrent.toFixed(1)} / 目标 ${totalTarget.toFixed(1)}`,
-    cards:[
-      routeCard('detail-icons-v1/icon-receipt-cute.png',items.length,'基金目标'),
-      routeCard('detail-icons-v1/icon-receipt-cute.png',totalCurrent.toFixed(1),'当前累计'),
-      routeCard('icons-collage-v2/icon-goal.png',totalTarget.toFixed(1),'总目标'),
-      routeCard('icons-collage-v2/icon-note.png',(appData.v2?.financeLink?.pendingEntryIds||[]).length,'待归集收入')
-    ],
-    focusHtml:items.slice(0,3).map(item=>`<span class="v2-chip">${esc(item.title||'愿望')} · ${Number(item.currentAmount||0)}/${Number(item.targetAmount||0)}</span>`).join(''),
-    miniKindA:'project',
-    miniTitleA:'先看当前目标',
-    miniHtmlA:utilityFocusChips(['先看最想完成的一个','收入到了再补','目标写具体一点'],'还没有基金目标也没关系'),
-    miniHintA:'这页更像给未来留一点期待，不用天天盯。',
-    miniKindB:'project',
-    miniTitleB:'最近这些目标',
-    miniHtmlB:utilityRecentList(recent,'最近还没有愿望基金项目'),
-    miniHintB:'下面保留原来的真实愿望基金区。',
-    promptKind:'project',
-    promptTitle:'先看最想完成的一个',
-    promptBody:'愿望基金不靠一下冲满，偶尔回来看看有没有更近一点，就已经在往前。',
-    promptChips:['先看一个目标','收入到了再补']
-  });
+function addPracticalWish(){
+  const title=document.getElementById('v2WishTitle')?.value.trim();
+  const target=Number(document.getElementById('v2WishTarget')?.value||0);
+  if(!title){toast('先写愿望名');return}
+  if(!target||target<=0){toast('先填目标金额');return}
+  appData.wishes=Array.isArray(appData.wishes)?appData.wishes:[];
+  appData.wishes.unshift({id:genId(),title,targetAmount:target,currentAmount:0,createdAt:todayStr(),source:'v2-quick'});
+  persist();if(typeof renderWishes==='function')renderWishes();renderGenericSectionRoute('wishSection');toast('愿望目标已新增');
 }
-function renderBirthdayRoute(){
-  const items=appData.birthdays||[];
-  const soonCount=items.filter(item=>{
-    const d=nextBirthdayReminderDate(item);
-    if(!d)return false;
-    return Math.round((d-new Date())/86400000)<=30;
-  }).length;
-  const recent=items.slice().sort((a,b)=>(Number(a.month)-Number(b.month))||(Number(a.day)-Number(b.day))).slice(0,4).map(item=>`${item.name} · ${item.month}/${item.day}`);
-  mountUtilityRoute('birthdaySection',{
-    shellClass:'v2-birthday-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'生日提醒',
-    title:'把重要的人记住，也是一种温柔',
-    body:'生日提醒不用做得很重。先把会忘的日期接住，后面再决定提前几天提醒、要不要准备什么。',
-    ringValue:items.length,
-    ringLabel:'已记录生日',
-    progressWidth:Math.min(100,30+soonCount*14),
-    progressText:`30 天内有 ${soonCount} 个提醒节点`,
-    cards:[
-      routeCard('icons-collage-v2/icon-all.png',items.length,'累计生日'),
-      routeCard('ui-icons-collage-v1/icon-alarm.png',soonCount,'30 天内提醒'),
-      routeCard('detail-icons-v1/icon-book-cute.png',recent.length,'最近可回看'),
-      routeCard('icons-collage-v2/icon-note.png',items.filter(x=>Number(x.remindDays||0)>0).length,'已设提前提醒')
-    ],
-    focusHtml:recent.slice(0,3).map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'先记最近的',
-    miniHtmlA:utilityFocusChips(['先补最容易忘的日期','提醒天数后面再调','先把名字和日期记住'],'先记一个也很好'),
-    miniHintA:'不用一次补齐所有人，先接住最容易忘的那几个。',
-    miniKindB:'day',
-    miniTitleB:'最近这些生日',
-    miniHtmlB:utilityRecentList(recent,'最近还没有生日提醒'),
-    miniHintB:'下面保留原来的真实生日提醒区。',
-    promptKind:'day',
-    promptTitle:'先补一个最容易忘的',
-    promptBody:'生日提醒最重要的是“先记住”，细节可以后面再慢慢补。',
-    promptChips:['先记一个','提醒天数后调']
-  });
+function savePracticalWishAmount(){
+  const id=document.getElementById('v2WishPick')?.value;
+  const amount=Number(document.getElementById('v2WishAmount')?.value||0);
+  const wish=(appData.wishes||[]).find(w=>w.id===id);
+  if(!wish){toast('先选择一个愿望');return}
+  if(!amount||amount<=0){toast('先填金额');return}
+  wish.currentAmount=Number(wish.currentAmount||0)+amount;
+  persist();if(typeof renderWishes==='function')renderWishes();renderGenericSectionRoute('wishSection');toast('愿望基金已更新');
 }
-function renderHealthRoute(){
-  const m=appData.menstrual||{};
-  const historyCount=(m.history||[]).length;
-  const cycleDays=Number(m.cycleDays||28);
-  const periodDays=Number(m.periodDays||5);
-  const lastStart=m.lastPeriodStart||'未记录';
-  mountUtilityRoute('healthSection',{
-    shellClass:'v2-health-route-shell',
-    theme:'day',
-    eyebrowKind:'day',
-    eyebrowLabel:'健康闹钟',
-    title:'照顾身体不是插队，是正事',
-    body:'这页更适合做轻一点的身体提醒和周期记录。先让它变得顺手，后面才不会像催命表单。',
-    ringValue:historyCount,
-    ringLabel:'周期记录',
-    progressWidth:Math.min(100,24+historyCount*10),
-    progressText:`周期 ${cycleDays} 天 · 经期 ${periodDays} 天`,
-    cards:[
-      routeCard('detail-icons-v1/icon-battery-cute.png',cycleDays,'周期 / 天'),
-      routeCard('detail-icons-v1/icon-water-cute.png',periodDays,'经期 / 天'),
-      routeCard('ui-icons-collage-v1/icon-alarm.png',m.notifications?'已开':'未开','提醒状态'),
-      routeCard('icons-collage-v2/icon-note.png',lastStart,'最近开始')
-    ],
-    focusHtml:[`周期 ${cycleDays} 天`,`经期 ${periodDays} 天`,m.notifications?'提醒已开启':'提醒未开启'].map(text=>`<span class="v2-chip">${esc(text)}</span>`).join(''),
-    miniKindA:'day',
-    miniTitleA:'先做最需要的',
-    miniHtmlA:utilityFocusChips(['先看提醒有没有开','只改最常用的一项','留一句身体状态'],'先把最关键的一项接住'),
-    miniHintA:'健康提醒要像陪伴，不要像催促。',
-    miniKindB:'day',
-    miniTitleB:'当前记录',
-    miniHtmlB:utilityRecentList([`最近开始：${lastStart}`,`周期：${cycleDays} 天`,`经期：${periodDays} 天`],'还没有健康记录'),
-    miniHintB:'下面保留原来的真实健康模块。',
-    promptKind:'day',
-    promptTitle:'先把身体接住',
-    promptBody:'不用把健康页做得很复杂，先让提醒和记录变轻，后面你才会愿意一直用。',
-    promptChips:['先开提醒','只改一项']
-  });
+function savePracticalWishLink(){
+  const id=document.getElementById('v2WishPick')?.value;
+  if(!id){toast('先选择一个愿望');return}
+  appData.v2.financeLink.wishId=id;
+  persist();renderFinanceLink?.();renderGenericSectionRoute('wishSection');toast('已设为小红书保研主包归集目标');
+}
+function savePracticalPeriodSettings(){
+  appData.menstrual=Object.assign({cycleDays:28,periodDays:5,lastPeriodStart:null,history:[],notifications:true},appData.menstrual||{});
+  const start=document.getElementById('v2PeriodStart')?.value||todayStr();
+  appData.menstrual.lastPeriodStart=start;
+  appData.menstrual.cycleDays=Math.max(15,Number(document.getElementById('v2PeriodCycle')?.value)||28);
+  appData.menstrual.periodDays=Math.max(1,Number(document.getElementById('v2PeriodDays')?.value)||5);
+  appData.menstrual.history=Array.isArray(appData.menstrual.history)?appData.menstrual.history:[];
+  if(start&&!appData.menstrual.history.some(x=>x.start===start))appData.menstrual.history.push({start,end:null,duration:null,source:'v2-period-settings'});
+  persist();if(typeof renderHealth==='function')renderHealth();renderGenericSectionRoute('healthSection');toast('周期设置已保存');
+}
+function recordPracticalPeriodStart(ds){
+  appData.menstrual=Object.assign({cycleDays:28,periodDays:5,lastPeriodStart:null,history:[],notifications:true},appData.menstrual||{});
+  appData.menstrual.history=Array.isArray(appData.menstrual.history)?appData.menstrual.history:[];
+  appData.menstrual.lastPeriodStart=ds;
+  appData.menstrual.history.push({start:ds,end:null,duration:null,source:'v2-period-start'});
+  persist();if(typeof renderHealth==='function')renderHealth();renderGenericSectionRoute('healthSection');toast('已记录今天开始');
+}
+function recordPracticalPeriodEnd(ds){
+  const m=appData.menstrual;if(!m)return;
+  m.history=Array.isArray(m.history)?m.history:[];
+  const last=[...m.history].reverse().find(x=>x.start&&!x.end);
+  if(last){last.end=ds;last.duration=Math.max(1,Math.round((new Date(ds+'T12:00:00')-new Date(last.start+'T12:00:00'))/86400000)+1)}
+  persist();if(typeof renderHealth==='function')renderHealth();renderGenericSectionRoute('healthSection');toast('已记录今天结束');
+}
+function saveReviewMaterial(){
+  const text=document.getElementById('v2ReviewMaterial')?.value.trim();
+  if(!text){toast('先写一句复盘素材');return}
+  appData.notes=Array.isArray(appData.notes)?appData.notes:[];
+  appData.notes.unshift({id:genId(),title:'复盘素材',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'review-quick'});
+  persist();renderNotes?.();document.getElementById('v2ReviewMaterial').value='';toast('已保存为复盘素材');
+}
+function savePracticalText(kind){
+  const isIdea=kind==='inspire';
+  const input=document.getElementById(isIdea?'v2QuickIdeaText':'v2QuickNoteText');
+  const text=input?.value.trim();
+  if(!text){toast('先写一句就行');return}
+  if(isIdea){
+    appData.inspirations=Array.isArray(appData.inspirations)?appData.inspirations:[];
+    appData.inspirations.unshift({id:genId(),text,emotion:'💡',date:todayStr(),createdAt:nowISO(),source:'route-quick'});
+    renderInspirations?.();
+    toast('灵感已保存');
+  }else{
+    appData.notes=Array.isArray(appData.notes)?appData.notes:[];
+    appData.notes.unshift({id:genId(),title:'随手记',text,date:todayStr(),createdAt:nowISO(),pinned:false,done:false,source:'route-quick'});
+    renderNotes?.();
+    toast('随手记已保存');
+  }
+  if(input)input.value='';
+  persist();
+  renderGenericSectionRoute(isIdea?'inspireSection':'notesSection');
 }
 function renderGenericSectionRoute(sectionId){
   if(!routeState||!['reviewSection','billSection','healthSection','birthdaySection','extraSection','inspireSection','notesSection','badgeSection','wishSection'].includes(sectionId))return;
-  if(sectionId==='reviewSection')return renderReviewRoute();
-  if(sectionId==='billSection')return renderBillRoute();
-  if(sectionId==='healthSection')return renderHealthRoute();
-  if(sectionId==='birthdaySection')return renderBirthdayRoute();
-  if(sectionId==='extraSection')return renderExtraRoute();
-  if(sectionId==='inspireSection')return renderInspireRoute();
-  if(sectionId==='notesSection')return renderNotesRoute();
-  if(sectionId==='badgeSection')return renderBadgeRoute();
-  if(sectionId==='wishSection')return renderWishRoute();
   const body=document.getElementById('v2RouteBody');
   const section=document.getElementById(sectionId);
   if(!body||!section)return;
@@ -999,7 +957,8 @@ function renderGenericSectionRoute(sectionId){
   );
   const shell=document.createElement('div');
   shell.className='v2-generic-route-shell';
-  shell.innerHTML=`
+  const practical=renderPracticalRouteTop(sectionId);
+  shell.innerHTML=practical||`
     <div class="v2-route-overview ${kind==='bill'||kind==='wish'?'project':kind==='review'?'planner':'day'} v2-route-journal">
       <div class="v2-route-overview-main">
         <div>
@@ -1032,6 +991,7 @@ function renderGenericSectionRoute(sectionId){
     </div>
     ${routePromptCard(kind==='review'?'planner':kind==='bill'||kind==='wish'?'project':'day','先从一小步开始',copy.body,copy.focus.slice(0,2))}`;
   body.insertBefore(shell,section);
+  bindPracticalRouteTop(sectionId);
 }
 function taskStickerAsset(item){
   const text=`${item?.title||''} ${item?.type||''} ${item?.taskType||''}`;
@@ -1618,10 +1578,18 @@ function deferPlanItemToDateLocal(ds,id,nextDs){
   persist();
   return true
 }
-function simpleLocalCaptureEligible(result){
+function simpleLocalCaptureEligible(result,text=''){
   if(!result||result.summary?.total!==1)return false;
   const nonEmpty=SMART_CAPTURE_GROUPS.filter(([key])=>(result.groups[key]||[]).length);
-  return nonEmpty.length===1&&['completed','water','status','mood','interrupts','hiddenCosts','bills','tomorrowAdvice'].includes(nonEmpty[0][0])
+  if(nonEmpty.length!==1)return false;
+  const key=nonEmpty[0][0],src=String(text||'').trim();
+  if(key==='mood')return /^(记录|记一下|保存|添加)(一下)?(心情|情绪)|^(我现在的心情是|今天心情是|心情记录)/.test(src);
+  if(key==='status')return /^(记录|记一下|保存|添加)(一下)?(状态|今日状态)|^(今天状态是|我现在状态是)/.test(src);
+  if(key==='interrupts'||key==='hiddenCosts'||key==='tomorrowAdvice')return /^(记录|记一下|保存|添加)(一下)?/.test(src);
+  if(key==='completed')return /^(我刚|刚刚|刚才|已经|已完成|完成了|做完了|记录完成|记一下完成)/.test(src);
+  if(key==='water')return /(喝水了|喝了一杯水|记录喝水|记一下喝水)/.test(src);
+  if(key==='bills')return /(记账|记一笔|花了|收入|支出|买了|付款|支付)/.test(src);
+  return false
 }
 function createLocalReminderFromText(text){
   const parsed=detectTimeFromText(text);
@@ -1654,7 +1622,7 @@ function tryHandleLocalChatCommand(text){
     return{handled:true,reply:`已直接记成提醒：${item.title}${item.plannedStart?`（${item.plannedStart}）`:''}`}
   }
   const simpleCapture=analyzeSmartCaptureText(src);
-  if(simpleLocalCaptureEligible(simpleCapture)){
+  if(simpleLocalCaptureEligible(simpleCapture,src)){
     const report=uploadSmartCaptureResult(simpleCapture,'auto');
     delete smartCaptureDrafts[simpleCapture.id];
     render?.();renderBills?.();renderCalendarInlinePreview?.(todayStr());if(routeState?.kind==='day')renderDaySheet();
@@ -2104,6 +2072,8 @@ function patchLegacyHooks(){
   showDayTasks=function(value){const ds=dateKey(value);calSelectedDate=new Date(ds+'T12:00:00');selectedDay=ds;renderCalendar();renderCalendarInlinePreview(ds)};
   renderCalendar=function(){legacyRenderCalendar();renderCalendarViewBanner();decorateCalendarCells()};
   render=function(){legacyRender();renderModeUI();renderQuickAddDashboard();renderHomeOverviewBoard();renderTaskPoolSection();renderLifeRhythmSection();if(routeState?.kind==='taskPool')renderTaskPoolRoute();if(routeState?.kind==='rhythm')renderLifeRhythmRoute();if(routeState?.kind==='food')renderFoodRoute();if(routeState?.kind==='lateNight')renderLateNightRoute();if(routeState?.kind==='planner')renderPlanner();renderCalendarViewBanner();renderFinanceLink?.()};
+  window.render=render;
+  window.renderCalendar=renderCalendar;
   exportData=exportV2;
   importData=importV2;
   const legacySaveBill=saveBill;
@@ -2131,14 +2101,14 @@ function renderQuickAddDashboard(){
   const tomorrow=(appData.v2.smartCapture.tomorrowAdvice||[]).length;
   board.innerHTML=`<div class="v2-quick-add-main ${isHomeMode()?'home':'normal'}"><div class="v2-quick-add-copy"><span class="v2-quick-add-eyebrow">${modeEmoji()} ${modeLabel()} · 快速入口</span><strong>${isHomeMode()?'今天先记下来，晚点再决定压不压进今天':'想到什么先放进来，再交给今天或任务池'}</strong><small>${targetText}</small></div><div class="v2-quick-add-pills"><span class="v2-quick-pill"><b>${stats.percent}%</b><small>今日进度</small></span><span class="v2-quick-pill"><b>${targetCount}</b><small>${target==='pool'?'池中待排':'待推进'}</small></span><span class="v2-quick-pill"><b>${tomorrow}</b><small>明日提示</small></span></div></div>`;
 }
-function routeMetaCopy(kind){
+function legacyRouteMetaCopy(kind){
   if(kind==='planner')return{chip:`${modeEmoji()} ${modeLabel()}`,desc:isHomeMode()?'先用保底视角排今天，再决定要不要多做。':'今天的安排可以先挑方案，不用一上来就排满。'}
   if(kind==='taskPool')return{chip:'🗂 Task Pool',desc:'想做但不急着今天做的事，先放这里慢慢调度。'}
   if(kind==='rhythm')return{chip:'🫧 Rhythm',desc:isHomeMode()?'先看身体和节奏，再安排任务密度。':'把状态记清楚，后面的 AI 才会更会安排。'}
   if(kind==='day')return{chip:selectedDay===todayStr()?`${modeEmoji()} Today`:selectedDay,desc:selectedDay===todayStr()?'今天的安排、完成和记录都收在这里。':'这一天的任务和记录会一起保留下来。'}
   return{chip:'📍 Page',desc:'这里是当前模块的展开页。'}
 }
-function updateRouteHead(kind=routeState?.kind){
+function legacyUpdateRouteHead(kind=routeState?.kind){
   const meta=routeMetaCopy(kind);
   const chip=document.getElementById('v2RouteMetaChip');
   const desc=document.getElementById('v2RouteMetaDesc');
@@ -2340,6 +2310,8 @@ window.selectCalendarDay=selectCalendarDay;
 
 function injectShell(){
   const app=document.querySelector('.app');
+  if(!app)return;
+  if(document.getElementById('v2RoutePage'))return;
   const parking=document.createElement('div');parking.id='v2Parking';parking.hidden=true;document.body.appendChild(parking);
   const planner=document.createElement('main');planner.id='v2Planner';planner.className='v2-module';parking.appendChild(planner);
   const route=document.createElement('main');route.id='v2RoutePage';route.className='v2-route-page';route.innerHTML='<header class="v2-route-head"><button class="v2-route-back" id="v2RouteBack">‹</button><span class="v2-route-icon" id="v2RouteIcon"></span><h1 class="v2-route-title" id="v2RouteTitle"></h1></header><div id="v2RouteBody"></div><nav class="v2-route-bottom-nav" id="v2RouteBottomNav"></nav>';app.after(route);
@@ -2506,25 +2478,63 @@ function buildHomeLaunchers(){
   ensureLateNightSection();
   const launchers=document.createElement('section');launchers.id='v2Launchers';launchers.className='v2-launchers';launchers.innerHTML=Object.entries(HOME_ROUTES).map(([id,[title,icon]])=>`<button class="v2-launcher" data-route="${id}"><span class="v2-launcher-icon">${iconImg(icon,36)}</span><span>${title}</span></button>`).join('');document.querySelector('.quick-add').after(launchers);
   Object.keys(HOME_ROUTES).forEach(id=>document.getElementById(id)?.classList.add('v2-home-module'));
-  launchers.querySelectorAll('[data-route]').forEach(btn=>btn.addEventListener('click',()=>openModulePage(btn.dataset.route)));
+  launchers.querySelectorAll('[data-route]').forEach(btn=>btn.addEventListener('click',()=>{
+    try{
+      openModulePage(btn.dataset.route);
+    }catch(error){
+      console.error('home launcher open failed', btn.dataset.route, error);
+      const section=document.getElementById(btn.dataset.route);
+      if(section){
+        section.classList.remove('collapsed');
+        section.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+      toast('这一页刚刚没正常跳开，我先把原内容展开给你');
+    }
+  }));
+  installHomeLauncherDelegation();
   ensureHomeOverviewSection();
   const footer=document.querySelector('#calendarSection .cal-footer');if(footer&&!document.getElementById('v2PlanEntry')){const btn=document.createElement('button');btn.id='v2PlanEntry';btn.className='v2-plan-entry';btn.innerHTML=iconImg('规划',16)+'进入智能规划室 ›';btn.addEventListener('click',()=>openPlannerPage());footer.appendChild(btn)}
+}
+function installHomeLauncherDelegation(){
+  if(window.__v2HomeLauncherDelegationInstalled)return;
+  document.addEventListener('click',event=>{
+    const btn=event.target.closest('#v2Launchers [data-route]');
+    if(!btn)return;
+    event.preventDefault();
+    try{
+      openModulePage(btn.dataset.route);
+    }catch(error){
+      console.error('delegated home launcher open failed', btn.dataset.route, error);
+      const section=document.getElementById(btn.dataset.route);
+      if(section){
+        section.classList.remove('collapsed');
+        section.scrollIntoView({behavior:'smooth',block:'start'});
+      }
+    }
+  });
+  window.__v2HomeLauncherDelegationInstalled=true;
 }
 function buildQuickCaptureUI(){
   if(document.getElementById('v2CaptureFab'))return;
   const chatFab=document.getElementById('chatFab');
+  if(!chatFab||!chatFab.parentElement)return;
   chatFab.parentElement.insertBefore(Object.assign(document.createElement('button'),{id:'v2CaptureFab',className:'fab v2-capture-fab'}),chatFab);
   const overlay=document.createElement('div');overlay.id='v2CaptureOverlay';overlay.className='chat-overlay';
-  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">快速整理</div><button class="chat-close" id="v2CaptureClose">✕</button></div><div class="v2-panel" style="margin:0"><p class="hint">直接说你刚做了什么、还没做什么、现在状态怎样、有没有账单或明天建议。我会先分类预览，再决定上传。</p><div class="v2-fields"><textarea id="v2CaptureInput" rows="8" placeholder="例如：我刚刚洗澡了，收拾了一个袋子，但是副业还没做。我头有点紧，今天低电量。明天不要给我排太满。"></textarea><div id="v2CapturePreview" class="v2-capture-preview hint">整理结果会显示在这里</div><div class="v2-row end"><button class="v2-secondary" id="v2CaptureParse">先整理一下</button><button class="v2-primary" id="v2CaptureSave">一键上传</button></div></div></div></div>`;
+  overlay.innerHTML=`<div class="chat-dialog v2-capture-dialog"><div class="chat-header"><div class="left">快速整理</div><button class="chat-close" id="v2CaptureClose">✕</button></div><div class="v2-panel" style="margin:0"><p class="hint">可以直接输入，也可以拍照识别手账/月计划。识别后会先预览，再决定上传到日程、今日清单或任务池。</p><div class="v2-fields"><textarea id="v2CaptureInput" rows="8" placeholder="例如：7月12日 10:00 复诊；7月18日 交材料；明天不要排太满。"></textarea><input id="v2CaptureOcrFile" type="file" accept="image/*" capture="environment" style="display:none"><img id="v2CaptureOcrPreview" class="v2-ocr-preview" alt="手账图片预览"><div id="v2CaptureOcrStatus" class="v2-ocr-status" data-mode="neutral">拍照识别会调用手机相机；识别结果会先放进上方文本框。</div><div class="v2-row" style="flex-wrap:wrap"><button class="v2-secondary" id="v2CapturePhoto">拍照识别手账</button><button class="v2-secondary" id="v2CapturePickImage">选图识别</button><button class="v2-secondary" id="v2CaptureSchedulePreview">识别为日程</button></div><div id="v2CapturePreview" class="v2-capture-preview hint">整理结果会显示在这里</div><div class="v2-row end"><button class="v2-secondary" id="v2CaptureParse">先整理一下</button><button class="v2-primary" id="v2CaptureSave">一键上传</button></div></div></div></div>`;
   document.body.appendChild(overlay);
   document.getElementById('v2CaptureFab').innerHTML=iconImg('清单',26);
   document.getElementById('v2CaptureFab').addEventListener('click',()=>{overlay.classList.add('show');document.getElementById('v2CaptureInput').focus()});
   document.getElementById('v2CaptureClose').addEventListener('click',()=>overlay.classList.remove('show'));
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('show')});
+  document.getElementById('v2CapturePhoto').addEventListener('click',()=>openCaptureOCRPicker(true));
+  document.getElementById('v2CapturePickImage').addEventListener('click',()=>openCaptureOCRPicker(false));
+  document.getElementById('v2CaptureOcrFile').addEventListener('change',handleCaptureOCRFile);
+  document.getElementById('v2CaptureSchedulePreview').addEventListener('click',previewCaptureScheduleImport);
   document.getElementById('v2CaptureParse').addEventListener('click',()=>previewNaturalCapture());
   document.getElementById('v2CaptureSave').addEventListener('click',()=>applyNaturalCapture());
   document.getElementById('v2CapturePreview').addEventListener('click',handleSmartCapturePreviewAction);
 }
+window.buildQuickCaptureUI=buildQuickCaptureUI;
 function enhanceAssistantWorkbench(){
   const overlay=document.getElementById('chatOverlay');
   const dialog=overlay?.querySelector('.chat-dialog');
@@ -2562,6 +2572,122 @@ function renderCapturePreview(result){
   const box=document.getElementById('v2CapturePreview');if(!box)return;
   box.innerHTML=buildSmartCapturePreviewHTML(result,{interactive:true});
 }
+function setCaptureOCRStatus(text,mode='neutral'){
+  const el=document.getElementById('v2CaptureOcrStatus');
+  if(el){el.textContent=text;el.dataset.mode=mode}
+}
+function openCaptureOCRPicker(camera=true){
+  const input=document.getElementById('v2CaptureOcrFile');
+  if(!input)return;
+  if(camera)input.setAttribute('capture','environment');
+  else input.removeAttribute('capture');
+  input.value='';
+  input.click();
+}
+async function handleCaptureOCRFile(event){
+  const file=event.target.files?.[0];
+  if(!file)return;
+  const preview=document.getElementById('v2CaptureOcrPreview');
+  if(preview){
+    preview.src=URL.createObjectURL(file);
+    preview.style.display='block';
+  }
+  setCaptureOCRStatus('正在识别图片文字…', 'neutral');
+  try{
+    const text=await recognizeOCRFile(file);
+    const input=document.getElementById('v2CaptureInput');
+    if(input)input.value=[input.value.trim(),text].filter(Boolean).join('\n');
+    setCaptureOCRStatus('图片识别完成。请先检查文字，再选择“识别为日程”或“先整理一下”。','ok');
+    previewCaptureScheduleImport();
+  }catch(error){
+    setCaptureOCRStatus(`识别暂时失败：${error.message||'服务不可用'}。可以先照着图片手动改文字，再继续整理。`,'warn');
+    toast('拍照识别暂时失败，可先手动改字后保存')
+  }
+}
+async function recognizeOCRFile(file){
+  if(!file)throw new Error('没有图片');
+  if('TextDetector'in window){
+    try{
+      const bitmap=await createImageBitmap(file),detector=new TextDetector(),lines=await detector.detect(bitmap),text=lines.map(x=>x.rawValue).join('\n').trim();
+      bitmap.close?.();
+      if(text)return text
+    }catch(error){}
+  }
+  const imageDataUrl=await prepareOCRImage(file);
+  const res=await fetch('/.netlify/functions/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.message||data.error||'OCR 服务不可用');
+  if(!data.text)throw new Error('没有识别到文字');
+  return data.text
+}
+function parseHandbookDateToken(text,baseYear=new Date().getFullYear()){
+  const raw=String(text||'').trim();
+  let match=raw.match(/(?:(20\d{2})[年\/\-.])?\s*(\d{1,2})\s*[月\/\-.]\s*(\d{1,2})\s*(?:日|号)?/);
+  if(match){
+    const year=Number(match[1]||baseYear),month=Number(match[2]),day=Number(match[3]);
+    if(month>=1&&month<=12&&day>=1&&day<=31)return{date:`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,raw:match[0]}
+  }
+  match=raw.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);
+  if(match){
+    const month=Number(match[1]),day=Number(match[2]);
+    if(month>=1&&month<=12&&day>=1&&day<=31)return{date:`${baseYear}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,raw:match[0]}
+  }
+  if(/今天|今日/.test(raw))return{date:todayStr(),raw:raw.match(/今天|今日/)?.[0]||'今天'};
+  if(/明天/.test(raw))return{date:daysLater(1),raw:'明天'};
+  if(/后天/.test(raw))return{date:daysLater(2),raw:'后天'};
+  return null
+}
+function parseHandbookScheduleText(text){
+  const lines=String(text||'').replace(/\r/g,'\n').split(/\n|；|;/).map(x=>x.trim()).filter(Boolean);
+  const items=[];
+  let currentDate=null,currentYear=new Date().getFullYear();
+  lines.forEach(line=>{
+    const dateHit=parseHandbookDateToken(line,currentYear);
+    if(dateHit){
+      currentDate=dateHit.date;
+      currentYear=Number(currentDate.slice(0,4));
+    }
+    const date=currentDate;
+    if(!date)return;
+    const timeHit=line.match(/([01]?\d|2[0-3])[:：点]\s*([0-5]\d)?/);
+    const time=timeHit?`${String(timeHit[1]).padStart(2,'0')}:${String(timeHit[2]||'00').padStart(2,'0')}`:'';
+    let title=line.replace(dateHit?.raw||'','').replace(timeHit?.[0]||'','').replace(/^[\s\-—、，,：:]+/,'').trim();
+    if(!title||/^(周[一二三四五六日天]|星期[一二三四五六日天])$/.test(title))return;
+    title=title.replace(/^(安排|日程|计划|todo|待办)[:：]*/i,'').trim();
+    if(!title)return;
+    items.push({id:'ocr-schedule-'+genId(),date,title,type:/复习|论文|学习|材料|作业|考试/.test(title)?'项目':'临时',plannedStart:time,timeLabel:time?getTimeSlotLabel(time):'',status:'todo',important:/考试|截止|ddl|提交|复诊|面试/.test(title),reminderMode:time?'notification':'notification',createdAt:nowISO(),source:'ocr-schedule'})
+  });
+  return items
+}
+function previewCaptureScheduleImport(){
+  const text=document.getElementById('v2CaptureInput')?.value.trim();
+  const box=document.getElementById('v2CapturePreview');
+  if(!text){toast('先拍照识别或输入手账文字');return[]}
+  const items=parseHandbookScheduleText(text);
+  if(!box)return items;
+  if(!items.length){
+    box.innerHTML='<div class="v2-capture-warn">还没有识别到带日期的日程。建议写成“7月12日 10:00 复诊”或“7/18 交材料”。</div>';
+    return items
+  }
+  const grouped=items.reduce((acc,item)=>(acc[item.date]=acc[item.date]||[],acc[item.date].push(item),acc),{});
+  box.innerHTML=`<div class="v2-capture-head"><span>识别到 ${items.length} 条日程</span><span>手账导入预览</span></div>${Object.entries(grouped).map(([date,list])=>`<div class="v2-capture-group"><div class="v2-capture-group-title">${esc(date)}</div>${list.map(item=>`<div class="v2-capture-line"><span class="v2-capture-index">•</span><span>${esc(item.plannedStart?`${item.plannedStart} ${item.title}`:item.title)}</span><span class="v2-capture-meta">${esc(item.type)}</span></div>`).join('')}</div>`).join('')}<div class="v2-row v2-capture-actions" style="justify-content:flex-end"><button class="v2-primary" data-ocr-schedule-import="1">导入这些日程</button><button class="v2-secondary" data-smart-action="retry">改文字后重识别</button></div>`;
+  return items
+}
+function importCaptureSchedule(){
+  const text=document.getElementById('v2CaptureInput')?.value.trim();
+  const items=parseHandbookScheduleText(text);
+  if(!items.length){toast('没有可导入的日程');return}
+  items.forEach(item=>upsertPlanItem(item.date,item));
+  appData.v2.smartCapture.uploadLog.unshift({id:'ocr-schedule-log-'+genId(),createdAt:nowISO(),success:[`日程：${items.length} 条已导入对应日期`],errors:[],sourceText:text,source:'ocr-schedule'});
+  appData.v2.smartCapture.uploadLog=appData.v2.smartCapture.uploadLog.slice(0,80);
+  persist();
+  render();
+  renderCalendar?.();
+  renderCalendarInlinePreview?.(selectedDay||todayStr());
+  const box=document.getElementById('v2CapturePreview');
+  if(box)box.innerHTML=`<pre class="hint" style="white-space:pre-wrap">已更新：\n- 日程：${items.length} 条已导入对应日期</pre>`;
+  toast(`已导入 ${items.length} 条日程`)
+}
 function previewNaturalCapture(fixedType){
   const text=document.getElementById('v2CaptureInput')?.value.trim();if(!text){toast('先写下你想整理的内容');return null}
   const result=fixedType?parseNaturalTaskInput(text,fixedType):analyzeSmartCaptureText(text);
@@ -2584,6 +2710,7 @@ function applyNaturalCapture(fixedType){
   return 0
 }
 function handleSmartCapturePreviewAction(e){
+  if(e.target.closest('[data-ocr-schedule-import]')){importCaptureSchedule();return}
   const btn=e.target.closest('[data-smart-action]');if(!btn)return;
   const box=document.getElementById('v2CapturePreview');if(!box)return;
   if(btn.dataset.smartAction==='save-edit'){
@@ -2713,6 +2840,10 @@ async function checkForAppUpdates(silent=true){
     const localCode=Number(APP_VERSION_CODE)||0;
     const hasUpdate=localCode?Number(remote.versionCode||0)>localCode:compareVersions(remote.versionName||remote.version,APP_VERSION)>0;
     if(hasUpdate){
+      if(silent){
+        localStorage.setItem('tm_update_latest_available',remoteToken);
+        return remote
+      }
       if(silent&&localStorage.getItem('tm_update_latest_seen')===remoteToken)return remote;
       localStorage.setItem('tm_update_latest_seen',remoteToken);
       showUpdatePrompt(remote);
@@ -2725,7 +2856,7 @@ async function checkForAppUpdates(silent=true){
   return null
 }
 window.checkForTaskManagerUpdates=checkForAppUpdates;
-function beginRoute(title,icon,kind){
+function legacyBeginRoute(title,icon,kind){
   if(routeState)closeRouteInternal(false);homeScroll=window.scrollY;const app=document.querySelector('.app'),page=document.getElementById('v2RoutePage'),body=document.getElementById('v2RouteBody');body.innerHTML='';app.classList.add('v2-hidden');page.classList.add('show');document.getElementById('v2RouteTitle').textContent=title;document.getElementById('v2RouteIcon').innerHTML=iconImg(icon,28);routeState={kind};updateRouteHead(kind);window.scrollTo(0,0);history.pushState({v2Route:kind},'',`#/${kind}`);return body
 }
 function renderOpenedModuleRoute(id){
@@ -2748,17 +2879,92 @@ function renderRouteFallbackShell(id,error){
   body.querySelector('.v2-route-fallback-shell')?.remove();
   const shell=document.createElement('div');
   shell.className='v2-route-fallback-shell';
-  shell.innerHTML=`<div class="v2-route-overview day v2-route-journal"><div class="v2-route-overview-main"><div>${routeEyebrow('day',cfg[0])}<h3>这一页刚刚没完整展开</h3><p>我先把原来的功能区保留下来，避免你点进来一片空白。下面的真实内容还在，可以先直接用。</p></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>!</strong><span>已保留内容</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:42%"></span></div><small>先继续操作，后面再把这一页收得更漂亮</small></div></div>${routeMascot('day','is-right')}${routeDecorPair()}</div></div>`;
+  shell.innerHTML=buildSafeRouteContent(id,cfg,error);
   body.insertBefore(shell,section);
+  section.classList.add('v2-route-source-hidden');
 }
-function openModulePage(id){const cfg=HOME_ROUTES[id],section=document.getElementById(id);if(!cfg||!section)return;const body=beginRoute(cfg[0],cfg[1],id.replace('Section',''));const marker=document.createComment('v2-return-'+id);section.parentNode.insertBefore(marker,section);const cards=[...section.querySelectorAll('.card')],expandedStates=cards.map(c=>c.classList.contains('expanded'));routeState=Object.assign(routeState,{section,marker,wasCollapsed:section.classList.contains('collapsed'),cards,expandedStates});section.classList.remove('collapsed','v2-home-module');cards.forEach(c=>c.classList.add('expanded'));body.appendChild(section);try{renderOpenedModuleRoute(id);buildSectionQuickAdd(id)}catch(error){renderRouteFallbackShell(id,error);toast('这一页刚刚没加载完整，先保留原功能区给你用')}} 
+function routeBodyHasGeneratedContent(body,section){
+  if(!body)return false;
+  return [...body.children].some(node=>{
+    if(node===section)return false;
+    return node.matches?.('.v2-route-overview,.v2-panel,.v2-route-fallback-shell,.v2-daily-route-shell,.v2-project-route-shell,.v2-cyclic-route-shell,.v2-temp-route-shell,.v2-generic-route-shell')||
+      !!node.querySelector?.('.v2-route-overview,.v2-panel,.v2-route-fallback-shell');
+  })
+}
+function buildSafeRouteContent(id,cfg,error){
+  const title=cfg?.[0]||'模块详情';
+  const typeMap={dailySection:'每日',projectSection:'项目',cyclicSection:'循环',tempSection:'临时'};
+  const taskType=typeMap[id];
+  const items=taskType?(appData.tasks||[]).filter(task=>task.type===taskType):[];
+  const pool=id==='taskPoolSection'?(typeof getTaskPool==='function'?getTaskPool():[]):[];
+  const visible=id==='taskPoolSection'?pool:items;
+  const preview=visible.slice(0,8).map(item=>`<div class="v2-panel v2-safe-route-item"><div class="v2-day-title">${taskSticker(item,'v2-task-sticker')}<span>${esc(item.title||item.rawText||'未命名')}</span></div><div class="v2-day-meta-pills" style="margin-top:8px">${metaPill(taskStickerAsset(item),item.type||item.taskType||'任务','soft')}${item.status?metaPill('icons-collage-v2/icon-note.png',item.status,'pool'):''}${item.plannedStart||item.alarmTime?metaPill('ui-icons-collage-v1/icon-alarm.png',item.plannedStart||item.alarmTime,'time'):''}</div>${item.note||item.subtask?`<div class="v2-day-note" style="margin-top:8px">${esc(item.note||item.subtask)}</div>`:''}</div>`).join('');
+  return `<div class="v2-route-overview day v2-route-journal"><div class="v2-route-overview-main"><div>${routeEyebrow('day',title)}<h3>${title}已接回基础内容</h3><p>新版美化区刚才有一处脚本没跑完整，我先显示干净的基础列表，避免空白或旧乱码。数据和功能都没有被删除。</p></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>${visible.length}</strong><span>当前条目</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:${Math.min(100,Math.max(18,visible.length*12))}%"></span></div><small>${error?.message?esc(String(error.message).slice(0,48)):'基础内容可用'}</small></div></div>${routeDecorPair()}</div></div>${preview||'<div class="v2-panel"><div class="empty-tip">这一页暂时没有条目，可以从首页或智能识别继续添加。</div></div>'}`;
+}
+function refreshSectionBeforeRoute(id){
+  try{
+    if(id==='taskPoolSection')renderTaskPoolSection();
+    else if(id==='rhythmSection')renderLifeRhythmSection();
+    else if(id==='foodSection'&&typeof renderFoodRoute==='function')renderFoodRoute();
+    else if(id==='lateNightSection'&&typeof renderLateNightRoute==='function')renderLateNightRoute();
+    else if(id==='billSection'&&typeof renderBills==='function')renderBills();
+    else if(id==='inspireSection'&&typeof renderInspirations==='function')renderInspirations();
+    else if(id==='notesSection'&&typeof renderNotes==='function')renderNotes();
+    else if(id==='reviewSection'&&typeof renderReviews==='function')renderReviews();
+  }catch(error){
+    console.error('route section refresh failed',id,error);
+  }
+}
+function openModulePage(id){
+  const cfg=HOME_ROUTES[id];
+  refreshSectionBeforeRoute(id);
+  const section=document.getElementById(id);
+  if(!cfg||!section)return;
+  const body=beginRoute(cfg[0],cfg[1],id.replace('Section',''));
+  const marker=document.createComment('v2-return-'+id);
+  section.parentNode.insertBefore(marker,section);
+  let cards=[...section.querySelectorAll('.card')],expandedStates=cards.map(c=>c.classList.contains('expanded'));
+  routeState=Object.assign(routeState,{section,marker,wasCollapsed:section.classList.contains('collapsed'),cards,expandedStates});
+  section.classList.add('v2-route-source');
+  section.classList.remove('v2-route-source-hidden');
+  body.appendChild(section);
+  section.classList.remove('collapsed','v2-home-module');
+  section.style.display='block';
+  cards=[...section.querySelectorAll('.card')];
+  expandedStates=cards.map(c=>c.classList.contains('expanded'));
+  routeState.cards=cards;
+  routeState.expandedStates=expandedStates;
+  cards.forEach(c=>c.classList.add('expanded'));
+  section.querySelectorAll('.card-body').forEach(node=>node.style.display='block');
+  let routeError=null;
+  try{renderOpenedModuleRoute(id)}catch(error){routeError=error}
+  try{buildSectionQuickAdd(id)}catch(error){console.error('route quick add failed',id,error)}
+  const generated=routeBodyHasGeneratedContent(body,section);
+  if(generated)section.classList.add('v2-route-source-hidden');
+  else routeError=routeError||new Error('route generated no visible content');
+  if(routeError){
+    renderRouteFallbackShell(id,routeError);
+    toast('这一页刚刚没加载完整，已先挡住旧乱码结构');
+  }
+} 
 function switchRouteModule(id){
   if(routeState?.section?.id===id)return;
   if(routeState)closeRouteInternal(false);
   openModulePage(id);
 }
 function openPlannerPage(){const body=beginRoute('智能规划室','规划','planner'),planner=document.getElementById('v2Planner');routeState.planner=planner;body.appendChild(planner);renderPlanner()}
-function requestCloseRoute(){if(routeState)history.back()}
+function requestCloseRoute(){
+  if(!routeState)return;
+  if(routeState.historyDisabled){
+    closeRouteInternal(true);
+    return;
+  }
+  try{
+    history.back();
+  }catch(error){
+    closeRouteInternal(true);
+  }
+}
 function routeMetaCopy(kind){
   if(kind==='planner')return{chip:`${modeEmoji()} ${modeLabel()}`,desc:isHomeMode()?'先用保底视角排今天，再决定要不要多做。':'今天的安排可以先挑方案，不用一上来就排满。'}
   if(kind==='taskPool')return{chip:'任务池',desc:'想做但不急着今天做的事，先放这里慢慢调度。'}
@@ -2790,7 +2996,11 @@ function handleRouteBottomNav(target){
   if(target==='planner'){if(routeState?.kind!=='planner')openPlannerPage();return}
   if(target==='add'){document.getElementById('v2CaptureFab')?.click();return}
   if(target==='stats'){if(routeState?.kind!=='review')openModulePage('reviewSection');return}
-  if(target==='profile'){document.getElementById('settingsPopup')?.classList.add('show')}
+  if(target==='profile'){
+    if(window.HomeV2Shell?.openProfile?.())return;
+    ['chatOverlay','v2CaptureOverlay'].forEach(id=>{const el=document.getElementById(id);if(el){el.classList.remove('show');['opacity','pointer-events','z-index','visibility','transform'].forEach(prop=>el.style.removeProperty(prop));}});
+    document.getElementById('settingsPopup')?.classList.add('show')
+  }
 }
 function updateRouteHead(kind=routeState?.kind){
   const meta=routeMetaCopy(kind);
@@ -2846,12 +3056,42 @@ function selectPlannerCalendarDay(ds){
   selectCalendarDay(ds);
   if(routeState?.kind==='planner')renderPlanner();
 }
+function ensureRouteShellReady(){
+  const app=document.querySelector('.app');
+  if(!app)return null;
+  let parking=document.getElementById('v2Parking');
+  if(!parking){
+    parking=document.createElement('div');
+    parking.id='v2Parking';
+    parking.hidden=true;
+    document.body.appendChild(parking);
+  }
+  if(!document.getElementById('v2Planner')){
+    const planner=document.createElement('main');
+    planner.id='v2Planner';
+    planner.className='v2-module';
+    parking.appendChild(planner);
+  }
+  let page=document.getElementById('v2RoutePage');
+  if(!page){
+    page=document.createElement('main');
+    page.id='v2RoutePage';
+    page.className='v2-route-page';
+    page.innerHTML='<header class="v2-route-head"><button class="v2-route-back" id="v2RouteBack">‹</button><span class="v2-route-icon" id="v2RouteIcon"></span><h1 class="v2-route-title" id="v2RouteTitle"></h1></header><div id="v2RouteBody"></div><nav class="v2-route-bottom-nav" id="v2RouteBottomNav"></nav>';
+    app.after(page);
+    document.getElementById('v2RouteBack')?.addEventListener('click',requestCloseRoute);
+  }
+  return document.getElementById('v2RouteBody');
+}
 function beginRoute(title,icon,kind){
   if(routeState)closeRouteInternal(false);
   homeScroll=window.scrollY;
   const app=document.querySelector('.app');
+  const body=ensureRouteShellReady();
   const page=document.getElementById('v2RoutePage');
-  const body=document.getElementById('v2RouteBody');
+  if(!app||!page||!body){
+    throw new Error('V2 route shell is not ready');
+  }
   body.innerHTML='';
   app.classList.add('v2-hidden');
   page.classList.add('show');
@@ -2860,7 +3100,12 @@ function beginRoute(title,icon,kind){
   routeState={kind};
   updateRouteHead(kind);
   window.scrollTo(0,0);
-  history.pushState({v2Route:kind},'',`#/${kind}`);
+  try{
+    history.pushState({v2Route:kind},'',`#/${kind}`);
+  }catch(error){
+    routeState.historyDisabled=true;
+    console.warn('v2 route history unavailable, fallback to local-only route state', error);
+  }
   return body
 }
 window.openModulePage=openModulePage;
@@ -2871,7 +3116,7 @@ window.setPlannerCalendarView=setPlannerCalendarView;
 window.shiftPlannerCalendar=shiftPlannerCalendar;
 window.jumpPlannerCalendarToday=jumpPlannerCalendarToday;
 window.selectPlannerCalendarDay=selectPlannerCalendarDay;
-function closeRouteInternal(restoreScroll=true){if(!routeState)return;const state=routeState;routeState=null;if(state.section){state.cards?.forEach((c,i)=>c.classList.toggle('expanded',state.expandedStates[i]));state.marker.parentNode.insertBefore(state.section,state.marker);state.marker.remove();state.section.classList.add('v2-home-module');state.section.classList.toggle('collapsed',state.wasCollapsed)}if(state.planner)document.getElementById('v2Parking').appendChild(state.planner);document.getElementById('v2RouteBody').innerHTML='';document.getElementById('v2RoutePage').classList.remove('show');document.querySelector('.app').classList.remove('v2-hidden');renderRouteBottomNav(null);if(restoreScroll)requestAnimationFrame(()=>window.scrollTo(0,homeScroll))
+function closeRouteInternal(restoreScroll=true){if(!routeState)return;const state=routeState;routeState=null;if(state.section){state.cards?.forEach((c,i)=>c.classList.toggle('expanded',state.expandedStates[i]));state.section.querySelectorAll('.card-body').forEach(node=>node.style.display='');state.section.classList.remove('v2-route-source','v2-route-source-hidden');state.marker.parentNode.insertBefore(state.section,state.marker);state.marker.remove();state.section.style.display='';state.section.classList.add('v2-home-module');state.section.classList.toggle('collapsed',state.wasCollapsed)}if(state.planner)document.getElementById('v2Parking').appendChild(state.planner);document.getElementById('v2RouteBody').innerHTML='';document.getElementById('v2RoutePage').classList.remove('show');document.querySelector('.app').classList.remove('v2-hidden');renderRouteBottomNav(null);if(restoreScroll)requestAnimationFrame(()=>window.scrollTo(0,homeScroll))
 }
 const RECHARGE_OPTIONS=['睡觉','洗澡','散步','运动','喝奶茶','喝咖啡','吃到喜欢的东西','聊天','独处','整理房间','撸猫','晒太阳','听歌'];
 const DRAIN_OPTIONS=['论文','PPT','咨询','学习','家务','外出','沟通','情绪波动','临时任务','跑腿','被催促','信息太多'];
@@ -4132,15 +4377,48 @@ function buildPlannerCalendarPanel(){
   return `<div class="v2-panel v2-planner-calendar-panel"><div class="v2-planner-calendar-head"><div class="v2-planner-calendar-copy"><h3>${routeMiniTitle('planner','规划视图')}</h3><strong>${viewTitle}</strong><p class="hint">${titleMap[view]}。${descMap[view]}</p></div><div class="v2-planner-calendar-nav"><button class="v2-secondary" onclick="shiftPlannerCalendar(-1)">‹</button><button class="v2-secondary is-today" onclick="jumpPlannerCalendarToday()">今</button><button class="v2-secondary" onclick="shiftPlannerCalendar(1)">›</button></div></div><div class="v2-planner-view-tabs"><button class="v2-planner-view-tab ${view==='week'?'active':''}" onclick="setPlannerCalendarView('week')">${stickerImg('view-icons/icon-study-english-sticker.svg','v2-planner-tab-img','周视图')}<span>周</span></button><button class="v2-planner-view-tab ${view==='month'?'active':''}" onclick="setPlannerCalendarView('month')">${stickerImg('view-icons/icon-baoyan-project-sticker.svg','v2-planner-tab-img','月视图')}<span>月</span></button><button class="v2-planner-view-tab ${view==='year'?'active':''}" onclick="setPlannerCalendarView('year')">${stickerImg('view-icons/icon-workout-sticker.svg','v2-planner-tab-img','年视图')}<span>年</span></button><button class="v2-planner-view-tab ${view==='slot'?'active':''}" onclick="setPlannerCalendarView('slot')">${stickerImg('view-icons/icon-day-slot-sticker.svg','v2-planner-tab-img','时段视图')}<span>时段</span></button></div><div class="v2-planner-calendar-surface">${surface}</div></div>`;
 }
 
+function buildPlannerFastPanel(){
+  const days=getWeekDays(calWeekOffset),pool=getTaskPool().filter(x=>!['已完成','放弃'].includes(String(x.status||''))).slice(0,5);
+  const options=days.map(d=>{const ds=dateKey(d);return `<option value="${ds}" ${ds===todayStr()?'selected':''}>${ds===todayStr()?'今天 · ':''}${'日一二三四五六'[d.getDay()]} ${d.getMonth()+1}.${d.getDate()}</option>`}).join('');
+  return `<div class="v2-panel v2-planner-fast-panel">
+    <div class="v2-practical-head">
+      <div>${routeEyebrow('planner','快速安排')}<h3>直接把任务放到某一天</h3><p class="hint">不用先生成复杂方案。想到一件，就先落到本周某天。</p></div>
+      <button class="v2-secondary" id="v2PlannerOpenPool">打开任务池</button>
+    </div>
+    <div class="v2-practical-form">
+      <input id="v2PlannerQuickTitle" placeholder="任务名，如：给老师发邮件 / 整理账单">
+      <select id="v2PlannerQuickDay">${options}</select>
+      <select id="v2PlannerQuickType"><option value="临时">临时</option><option value="项目">项目</option><option value="每日">每日</option><option value="循环">循环</option><option value="记录">记录</option></select>
+      <button class="v2-primary" id="v2PlannerQuickAdd">安排</button>
+    </div>
+    <div class="v2-planner-pool-strip">
+      ${pool.length?pool.map(item=>`<button type="button" data-planner-pool="${esc(item.id)}">${taskSticker(item,'v2-chip-sticker')}<span>${esc(item.title)}</span></button>`).join(''):'<span class="hint">任务池暂时是空的，先在上面直接写一条。</span>'}
+    </div>
+  </div>`;
+}
+
+function addPlannerQuickItem(){
+  const title=document.getElementById('v2PlannerQuickTitle')?.value.trim();
+  const ds=document.getElementById('v2PlannerQuickDay')?.value||todayStr();
+  const type=document.getElementById('v2PlannerQuickType')?.value||'临时';
+  if(!title){toast('先写任务名');return}
+  upsertPlanItem(ds,{id:'planner-quick-'+genId(),title,type,status:'todo',important:false,reminderMode:'notification',createdAt:nowISO(),source:'planner-quick'});
+  persist();renderPlanner();renderCalendarInlinePreview?.(ds);toast(ds===todayStr()?'已安排到今天':'已安排到选中的日期');
+}
+
+function schedulePoolFromPlanner(poolId){
+  const ds=document.getElementById('v2PlannerQuickDay')?.value||todayStr();
+  scheduleTaskPoolItem(poolId,ds);
+  renderPlanner();
+}
+
 function renderPlanner(){
   refreshPlannerStats();const p=appData.v2.planner.profile,batch=activeBatch(),suggestions=appData.v2.planner.suggestions||[],history=buildHistoryDigest(7),options=ensurePlanOptions(),carry=appData.v2.conversation?.carrySummary||'',context=buildPlannerContext();
   const quoteTitle=pickRotatingCopy('planner','title',String(options.length));
   const quoteBody=pickRotatingCopy('planner','body',String(history.done));
-  let html=buildPlannerCalendarPanel();
+  let html=buildPlannerCalendarPanel()+buildPlannerFastPanel();
   const notify=notificationStatusSummary();
-  html+=`<div class="v2-route-overview planner ${isHomeMode()?'home':''} v2-route-plannerboard"><div class="v2-route-overview-main"><div>${routeEyebrow('planner','智能规划室')}<h3>${isHomeMode()?pickRotatingCopy('home','title','planner-home'):quoteTitle}</h3><p>${quoteBody} ${history.summary}${p.lastChosenStyle?` 你最近更常选「${p.lastChosenStyle}」。`:''}</p><div class="v2-rhythm-tags" style="margin-top:10px"><span class="v2-chip active">${suggestions.length} 条今日建议</span><span class="v2-chip">${context.pool.length} 条待调度</span><span class="v2-chip">${history.done} 条近 7 天完成</span></div></div><div class="v2-route-overview-progress"><div class="v2-overview-ring"><strong>${options.length}</strong><span>方案</span></div><div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:${Math.min(100,Math.max(24,history.done*8))}%"></span></div><small>先挑一版，再微调轻重</small></div></div>${routeOverviewAside('planner','安排提示',['先从 3 个版本里挑 1 个',context.pool.length?`任务池里还有 ${context.pool.length} 条待调度`:'任务池空了就先去补任务',p.lastChosenStyle?`你最近更常选 ${p.lastChosenStyle}`:'今天先选最轻的一版也可以'])}${routeMascot('planner','is-right')}${routeDecorPair()}</div><div class="v2-overview-cards">${routeCard('icons-collage-v2/icon-goal.png',esc(p.lastChosenStyle||'未选择'),'最近常选方案')}${routeCard('icons-collage-v2/icon-note.png',context.pool.length,'任务池待安排')}${routeCard('ui-icons-collage-v1/icon-complete-badge.png',history.done,'近 7 天完成')}${routeCard(DETAIL_ICON_ART.mood,suggestions.length,'今日建议')}</div></div>`;
   html+=`<div class="v2-route-mini-grid v2-route-mini-grid--planner"><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('planner','今日偏好')}</h3><div class="v2-mini-chip-grid"><span class="v2-chip active">${esc(p.lastChosenStyle||'还没选方案')}</span><span class="v2-chip">${context.focus==='life'?'生活优先':context.focus==='money'?'赚钱优先':context.focus==='paper'?'论文优先':'均衡安排'}</span><span class="v2-chip">${context.lowEnergy?'低电量保护':'可正常推进'}</span></div></div><div class="v2-panel v2-mini-note"><h3>${routeMiniTitle('planner','提醒权限')}</h3><p class="hint">${esc(notify.label)}</p><div class="v2-mini-chip-grid"><span class="v2-chip">${esc(notify.hasLocal?'通知可接入':'当前仅网页预览')}</span><span class="v2-chip">${esc(notify.hasAlarm?'可申请系统闹钟':'暂未接系统闹钟')}</span></div><div class="v2-row" style="margin-top:10px;gap:6px;flex-wrap:wrap"><button class="v2-secondary" id="v2PlannerPermissionCheck">检测权限</button>${notify.hasAlarm?'<button class="v2-secondary" id="v2PlannerExactAlarm">闹钟授权</button>':''}</div></div></div>`;
-  html+=routePromptCard('planner','今天先选一个能落地的版本','计划不是拿来压自己的。先选一个愿意执行的，再慢慢调轻重。',['先选一套','再微调','别把今天排满']);
   html+='<div class="v2-panel"><h3>🧭 当前任务批次</h3>';
   if(batch)html+=`<div class="v2-batch active"><div class="v2-batch-title"><span>${esc(batch.title)}</span><span class="v2-chip active">进行中</span></div><small>${batch.startDate} 至 ${batch.endDate}</small>${batch.items.map((x,i)=>`<div class="v2-row" style="margin-top:7px"><span style="flex:1;font-size:13px">${esc(x.title)}</span><button class="v2-secondary" data-batch-today="${i}">安排今天</button></div>`).join('')}</div><div class="v2-row end" style="margin-top:10px"><button class="v2-secondary" id="v2FinishBatch">这一批完成，开启下一批</button></div>`;
   else html+='<p class="hint">当前没有进行中的批次。建立一批本周任务后，短期聊天可以随批次归档，个人习惯不会丢失。</p>';
@@ -4153,6 +4431,10 @@ function renderPlanner(){
   html+=`<div class="v2-panel"><h3>🧠 会话延续摘要</h3><p class="hint">${carry?esc(carry):'当前还没有生成会话摘要。对话变长时可以直接压缩成下一轮可继承的摘要。'}</p><div class="v2-row end" style="margin-top:8px"><button class="v2-secondary" id="v2BuildCarrySummary">生成会话摘要</button><button class="v2-secondary" id="v2StartNextRound">开启下一轮</button></div></div>`;
   html+=`<div class="v2-panel"><h3>🌱 我的规划底色</h3><div class="v2-fields"><div class="v2-grid"><label>每天最多任务类型<input id="v2MaxTypes" type="number" min="1" max="6" value="${p.maxTaskTypes}"></label><label>每天最多家务<input id="v2Chores" type="number" min="0" max="5" value="${p.choresPerDay}"></label></div><label><span><input id="v2LowResistance" type="checkbox" ${p.insertLowResistance?'checked':''}> 空余时间穿插低阻力任务</span></label><label>长期规划原则<textarea id="v2Principles" rows="4">${esc(p.principles)}</textarea></label><button class="v2-primary" id="v2SaveProfile">保存长期习惯</button></div></div>`;
   document.getElementById('v2PlannerContent').innerHTML=html;
+  document.getElementById('v2PlannerQuickAdd')?.addEventListener('click',addPlannerQuickItem);
+  document.getElementById('v2PlannerQuickTitle')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addPlannerQuickItem()}});
+  document.getElementById('v2PlannerOpenPool')?.addEventListener('click',()=>openModulePage('taskPoolSection'));
+  document.querySelectorAll('[data-planner-pool]').forEach(b=>b.addEventListener('click',()=>schedulePoolFromPlanner(b.dataset.plannerPool)));
   document.getElementById('v2CreateBatch').addEventListener('click',createBatch);
   document.getElementById('v2SaveProfile').addEventListener('click',saveProfile);
   document.getElementById('v2FinishBatch')?.addEventListener('click',finishBatch);
@@ -4195,7 +4477,8 @@ function injectRecordsTools(){
 }
 
 function renderFinanceLink(){const box=document.getElementById('v2FinanceLink');if(!box)return;const link=appData.v2.financeLink,options=appData.wishes.map(w=>`<option value="${esc(w.id)}" ${w.id===link.wishId?'selected':''}>${esc(w.title)}</option>`).join('');box.innerHTML=`<h3>🔗 保研主包自动归集</h3><p class="hint">收入分类选择“${esc(link.category)}”后，金额自动计入关联目标；每笔账单只归集一次。</p><div class="v2-row" style="margin-top:8px"><select id="v2FinanceWish" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px"><option value="">选择愿望基金目标</option>${options}</select><button class="v2-secondary" id="v2FinanceSave">保存关联</button></div>`;document.getElementById('v2FinanceSave').addEventListener('click',()=>{link.wishId=document.getElementById('v2FinanceWish').value||null;persist();toast('自动归集目标已保存')})}
-function linkFinanceEntry(entry){const link=appData.v2.financeLink;if(!entry||entry.type!=='income'||entry.category!==link.category||link.linkedEntryIds.includes(entry.id))return;const wish=appData.wishes.find(w=>w.id===link.wishId)||appData.wishes.find(w=>/保研.*主包|主包/.test(w.title));if(!wish){if(!link.pendingEntryIds.includes(entry.id))link.pendingEntryIds.push(entry.id);return}wish.currentAmount=(Number(wish.currentAmount)||0)+Number(entry.amount||0);link.linkedEntryIds.push(entry.id);link.pendingEntryIds=link.pendingEntryIds.filter(x=>x!==entry.id);toast(`已自动计入「${wish.title}」`)}
+function linkFinanceEntry(entry){const link=appData.v2.financeLink;if(!entry||entry.type!=='income'||link.linkedEntryIds.includes(entry.id))return;const category=String(entry.category||''),linkCategory=String(link.category||'保研小红书主包');const isLinkedCategory=category===linkCategory||/小红书.*保研|保研.*小红书|保研.*主包|主包/.test(category);if(!isLinkedCategory)return;const wish=appData.wishes.find(w=>w.id===link.wishId)||appData.wishes.find(w=>/保研.*主包|主包|小红书/.test(w.title));if(!wish){if(!link.pendingEntryIds.includes(entry.id))link.pendingEntryIds.push(entry.id);return}wish.currentAmount=(Number(wish.currentAmount)||0)+Number(entry.amount||0);link.linkedEntryIds.push(entry.id);link.pendingEntryIds=link.pendingEntryIds.filter(x=>x!==entry.id);toast(`已自动计入「${wish.title}」`)}
+window.linkFinanceEntry=linkFinanceEntry;
 
 function previewOCR(e){const file=e.target.files?.[0];if(!file)return;const img=document.getElementById('v2OcrPreview');img.src=URL.createObjectURL(file);img.style.display='block'}
 function setOCRStatus(text,mode='neutral'){const el=document.getElementById('v2OcrStatus');if(!el)return;el.textContent=text;el.dataset.mode=mode}
@@ -4314,7 +4597,12 @@ function syncCloudForm(){
   if(key)key.value=cloud.apiKey||'';
   updateCloudStatus(cloud.lastError?`上次云端操作失败：${cloud.lastError}`:cloud.lastUploadedAt?`最近上传：${cloud.lastUploadedAt.slice(0,16).replace('T',' ')}`:'尚未上传到云端')
 }
-function updateCloudStatus(text){const el=document.getElementById('v2CloudStatus');if(el)el.textContent=text||''}
+function updateCloudStatus(text){
+  const el=document.getElementById('v2CloudStatus');
+  if(el)el.textContent=text||'';
+  const profileEl=document.getElementById('homeV2CloudStatus');
+  if(profileEl)profileEl.textContent=text||''
+}
 function readCloudForm(){
   const cloud=appData.v2.cloud||{},bin=document.getElementById('v2CloudBinId')?.value.trim(),key=document.getElementById('v2CloudApiKey')?.value.trim();
   if(bin!==undefined&&bin)cloud.binId=bin;
@@ -4369,6 +4657,7 @@ async function restoreCloudBackup(){
     updateCloudStatus(`恢复成功：${appData.v2.cloud.lastRestoreAt.slice(0,16).replace('T',' ')}`);toast('已恢复云端备份')
   }catch(e){appData.v2.cloud.lastError=String(e.message||e);persist();updateCloudStatus(`恢复失败：${appData.v2.cloud.lastError}`)}
 }
+Object.assign(window,{syncCloudForm,updateCloudStatus,readCloudForm,buildCloudBundle,importCloudBundle,compressLocalData,uploadCloudBackup,restoreCloudBackup});
 
 function nativePlugins(){return window.Capacitor?.Plugins||null}
 let activeTimeInput=null;
@@ -4565,17 +4854,32 @@ async function importV2(event){const file=event.target.files?.[0];if(!file)retur
 
 function captureLegacyActions(){document.addEventListener('click',e=>{const btn=e.target.closest('[data-action]');if(!btn)return;const action=btn.dataset.action,id=btn.dataset.id;if(action==='temp-done'){const task=appData.tasks.find(x=>x.id===id);if(task){const item=itemFromTask(task,todayStr());item.status='done';item.completedAt=nowISO();upsertPlanItem(todayStr(),item)}}},true)}
 
+function runBootStep(name,fn){
+  try{return fn()}catch(error){console.error('v2 boot step failed:',name,error);return null}
+}
+
 window.v2Boot=function(){
-  patchLegacyHooks();const source=loadIsolatedData();injectShell();installTimePickerHooks();captureLegacyActions();syncTodaySnapshot();updateHabitSummary();window.AIMemorySystem?.init(appData);enhanceReviewSection();persist();render();
-  initRuntimeAppInfo().then(()=>applyRuntimeVersionMigration()).then(changed=>{if(changed)toast(`已切换到新版本 ${versionLabel()}`)});
+  window.__v2BootRan=true;
+  runBootStep('patchLegacyHooks',()=>patchLegacyHooks());
+  const source=runBootStep('loadIsolatedData',()=>loadIsolatedData())||'empty';
+  runBootStep('injectShell',()=>injectShell());
+  runBootStep('installTimePickerHooks',()=>installTimePickerHooks());
+  runBootStep('captureLegacyActions',()=>captureLegacyActions());
+  runBootStep('syncTodaySnapshot',()=>syncTodaySnapshot());
+  runBootStep('updateHabitSummary',()=>updateHabitSummary());
+  runBootStep('aiMemoryInit',()=>window.AIMemorySystem?.init(appData));
+  runBootStep('enhanceReviewSection',()=>enhanceReviewSection());
+  runBootStep('persist',()=>persist());
+  runBootStep('render',()=>render());
+  initRuntimeAppInfo().then(()=>applyRuntimeVersionMigration()).then(changed=>{if(changed)toast(`已切换到新版本 ${versionLabel()}`)}).catch(error=>console.error('runtime version init failed',error));
   setTimeout(()=>checkForAppUpdates(true),1600);
   try{document.getElementById('loadingOverlay')?.classList.remove('show')}catch(e){}
-  document.getElementById('v2ImportBanner').classList.add('v2-hidden');
+  document.getElementById('v2ImportBanner')?.classList.add('v2-hidden');
   if(source==='legacy')toast('已把原版本机数据复制到 V2，原版未改变');
-  autoGeneratePeriodicReviews();
-  syncCloudForm();
-  initNativeNotifications().then(()=>{schedulePendingReminders();scheduleAIMemorySuggestion()});
-  maybeSendBirthdayWebNotice();
+  runBootStep('autoGeneratePeriodicReviews',()=>autoGeneratePeriodicReviews());
+  runBootStep('syncCloudForm',()=>syncCloudForm());
+  initNativeNotifications().then(()=>{schedulePendingReminders();scheduleAIMemorySuggestion()}).catch(error=>console.error('native notification init failed',error));
+  runBootStep('maybeSendBirthdayWebNotice',()=>maybeSendBirthdayWebNotice());
 };
 })();
 
