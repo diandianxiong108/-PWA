@@ -18,6 +18,7 @@
     { id: 'rhythm', title: '生活能量', tone: 'tone-mint', image: 'icons-collage-v2/icon-ai-review.png', action: 'rhythmSection' },
     { id: 'review', title: 'AI复盘', tone: 'tone-blue', image: 'icons-collage-v2/icon-ai-review.png', action: 'reviewSection' },
     { id: 'wish', title: '愿望基金', tone: 'tone-pink', image: 'icons-collage-v2/icon-goal.png', action: 'wishSection' },
+    { id: 'badge', title: '成就勋章', tone: 'tone-yellow', image: 'icons-collage-v2/icon-all.png', action: 'badgeSection' },
     { id: 'all', title: '全部功能', tone: 'tone-yellow', image: 'icons-collage-v2/icon-all.png', action: 'all' }
   ];
 
@@ -154,17 +155,25 @@
     const text = getQuickText();
     if(!text){ showQuickToast('先写一句就行'); return; }
     window.appData = window.appData || {};
-    const ds = todayKey();
+    const parsed = window.parseNaturalTaskInput?.(text, target === 'pool' || target === 'today' ? '临时' : null);
+    const ds = document.getElementById('homeV2QuickDate')?.value || parsed?.date || todayKey();
+    const start = document.getElementById('homeV2QuickStart')?.value || parsed?.tasks?.[0]?.scheduledStart || '';
+    const end = document.getElementById('homeV2QuickEnd')?.value || parsed?.tasks?.[0]?.scheduledEnd || '';
+    const noteTitle = document.getElementById('homeV2QuickTitle')?.value.trim() || (text.length > 18 ? text.slice(0,18) : text);
     if(target === 'today'){
       window.upsertPlanItem?.(ds, {
         id: quickId('home-quick-today'),
         title: text,
         type: '临时',
         status: 'todo',
+        plannedStart:start,
+        plannedEnd:end,
+        alarmTime:start,
+        scheduledDate:ds,
         source: 'home-quick',
         createdAt: new Date().toISOString()
       });
-      showQuickToast('已放进今日清单');
+      showQuickToast(ds === todayKey() ? '已放进今日清单' : `已安排到 ${ds}`);
     }else if(target === 'pool'){
       window.upsertTaskPoolItem?.({
         id: quickId('home-quick-pool'),
@@ -173,6 +182,9 @@
         status: '待安排',
         source: 'home-quick',
         rawText: text,
+        scheduledDate:ds,
+        plannedStart:start,
+        plannedEnd:end,
         createdAt: new Date().toISOString()
       });
       showQuickToast('已丢进任务池');
@@ -182,7 +194,7 @@
       showQuickToast('灵感已收住');
     }else{
       window.appData.notes = Array.isArray(window.appData.notes) ? window.appData.notes : [];
-      window.appData.notes.unshift({id: quickId('note'), title: '随手记', text, date: ds, createdAt: new Date().toISOString(), pinned: false, done: false, source: 'home-quick'});
+      window.appData.notes.unshift({id: quickId('note'), title: noteTitle || '随手记', text, date: ds, createdAt: new Date().toISOString(), pinned: false, done: false, source: 'home-quick'});
       showQuickToast('随手记已保存');
     }
     clearQuickText();
@@ -194,7 +206,8 @@
     const amount = Number(document.getElementById('homeV2BillAmount')?.value || 0);
     const rawType = document.getElementById('homeV2BillType')?.value || 'expense';
     const note = document.getElementById('homeV2BillNote')?.value.trim() || '';
-    let category = document.getElementById('homeV2BillCategory')?.value.trim() || '';
+    const categoryField = document.getElementById('homeV2BillCategory');
+    let category = categoryField?.value.trim() || '';
     if(!amount || amount <= 0){ showQuickToast('先填金额'); return; }
     window.appData = window.appData || {};
     const records = window.appData.records = window.appData.records || {entries: [], categories: {income: ['收入'], expense: ['餐饮', '交通', '购物', '其他']}};
@@ -207,10 +220,45 @@
     try{ window.linkFinanceEntry?.(entry); }catch(error){}
     document.getElementById('homeV2BillAmount').value = '';
     document.getElementById('homeV2BillNote').value = '';
+    if(categoryField) categoryField.value = '';
     quickPersist();
     try{ window.renderBills?.(); }catch(error){}
     quickRerender();
     showQuickToast(rawType === 'refund' ? '退款已记下' : type === 'income' ? '收入已记下' : '支出已记下');
+  }
+
+  function homeBillCategoryOptions(rawType){
+    if(rawType === 'income'){
+      return ['小红书学习主包','分装','生活费','补贴','年终奖','奖学金','退款转回','其他收入'];
+    }
+    if(rawType === 'refund'){
+      return ['退款','退货','报销回款','押金退回','其他退款'];
+    }
+    return ['餐饮','出行','会员充值','漂亮纸胶带','美甲美容','日用品','学习投入','医疗健康','居家采购','其他支出'];
+  }
+
+  function syncHomeBillCategorySuggestions(){
+    const list = document.getElementById('homeV2BillCategoryList');
+    const type = document.getElementById('homeV2BillType')?.value || 'expense';
+    const categoryInput = document.getElementById('homeV2BillCategory');
+    if(categoryInput){
+      categoryInput.placeholder = type === 'income' ? '收入分类，可选或自定义' : type === 'refund' ? '退款分类，可选或自定义' : '支出分类，可选或自定义';
+    }
+    if(!list) return;
+    list.innerHTML = homeBillCategoryOptions(type).map(item => `<button type="button" data-homev2-bill-category="${item}">${item}</button>`).join('') + '<button type="button" data-homev2-bill-category="custom">自定义</button>';
+    list.querySelectorAll('[data-homev2-bill-category]').forEach(button => {
+      button.addEventListener('click', event => {
+        const value = event.currentTarget.dataset.homev2BillCategory;
+        const input = document.getElementById('homeV2BillCategory');
+        if(!input) return;
+        if(value === 'custom'){
+          input.focus();
+          input.select?.();
+          return;
+        }
+        input.value = value || '';
+      });
+    });
   }
 
   function saveHomeV2Pool(){
@@ -594,11 +642,19 @@
     try{return JSON.parse(decodeURIComponent(payload || ''))}catch(error){return null}
   }
   function normalizeArtifactTask(task){
+    const title = String(task?.title || task?.text || task?.name || '').trim() || '未命名任务';
+    const parsed = window.parseNaturalTaskInput?.([title, task?.date, task?.deadline, task?.time, task?.note].filter(Boolean).join(' '), task?.type || '临时');
+    const first = parsed?.tasks?.[0] || {};
     return {
-      title:String(task?.title || task?.text || task?.name || '').trim() || '未命名任务',
+      title,
       taskType:task?.type || '临时',
       note:task?.note || task?.reason || '',
       duration:task?.duration || task?.estimate || '',
+      scheduledDate:task?.scheduledDate || task?.date || first.scheduledDate || parsed?.date || '',
+      deadline:task?.deadline || task?.dueDate || first.deadline || '',
+      plannedStart:task?.plannedStart || task?.scheduledStart || task?.time || first.scheduledStart || '',
+      plannedEnd:task?.plannedEnd || task?.scheduledEnd || first.scheduledEnd || '',
+      alarmTime:task?.alarmTime || first.alarmTime || '',
       rawText:task?.rawText || task?.title || task?.text || '',
       source:'ai-assistant'
     };
@@ -609,21 +665,29 @@
     const tasks = (artifacts.suggestedTasks || []).map(normalizeArtifactTask).filter(item => item.title);
     const done = artifacts.completedItems || [];
     if(action === 'pool'){
-      tasks.forEach(item => window.upsertTaskPoolItem?.(Object.assign({}, item, {status:'待安排'})));
+      tasks.forEach(item => window.upsertTaskPoolItem?.(Object.assign({}, item, {status:'待安排', note:[item.note,item.scheduledDate?`建议日期 ${item.scheduledDate}`:'',item.deadline?`截止 ${item.deadline}`:''].filter(Boolean).join('；')})));
       window.persist?.(); window.render?.();
       renderAssistantPanelLog([{role:'ai', content:`已确认落地：${tasks.length} 条放进任务池。今天不用全做，先让它们有位置。`}]);
       return;
     }
     if(action === 'today'){
       const today = window.todayStr?.() || new Date().toISOString().slice(0,10);
-      tasks.slice(0,3).forEach(item => window.upsertPlanItem?.(today, {
+      tasks.slice(0,3).forEach(item => {
+        const targetDate = item.scheduledDate || today;
+        window.upsertPlanItem?.(targetDate, {
         id:'ai-plan-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
         title:item.title,
         type:item.taskType || '临时',
         status:'todo',
         source:'ai-assistant',
-        note:item.note || 'AI 助手确认后加入今日'
-      }));
+        note:item.note || 'AI 助手确认后加入今日',
+        plannedStart:item.plannedStart || item.alarmTime || '',
+        plannedEnd:item.plannedEnd || '',
+        alarmTime:item.alarmTime || item.plannedStart || '',
+        deadline:item.deadline || '',
+        scheduledDate:targetDate
+      });
+      });
       window.persist?.(); window.render?.(); window.renderCalendarInlinePreview?.(today);
       renderAssistantPanelLog([{role:'ai', content:`已确认落地：今天只放入 ${Math.min(tasks.length,3)} 件。我们不把今天塞满。`}]);
       return;
@@ -693,6 +757,14 @@
     const base = configured || '/.netlify/functions/ai-chat-v2';
     return window.resolveTaskApiUrl ? window.resolveTaskApiUrl(base) : base;
   }
+  function defaultCloudOrigin(){
+    return window.TASK_DEFAULT_CLOUD_ORIGIN || 'https://soft-douhua-52d678.netlify.app';
+  }
+  function assistantHasCloudAccess(){
+    const configuredEndpoint = window.appData?.v2?.ai?.chatEndpoint || localStorage.getItem('task-ai-chat-endpoint') || '';
+    const configuredOrigin = window.appData?.v2?.ai?.cloudOrigin || localStorage.getItem('task-cloud-origin') || defaultCloudOrigin();
+    return Boolean(String(configuredEndpoint || '').trim() || String(configuredOrigin || '').trim() || location.protocol !== 'file:');
+  }
   async function requestAssistantAIReply(text, history, mode = currentAssistantMode()){
     try{
       const messages = history.slice(mode === 'think' ? -8 : -12).map(item => ({role:item.role === 'user' ? 'user' : 'assistant', content:item.content || item.text || ''})).filter(item => item.content);
@@ -742,18 +814,18 @@
     window.renderCalendarInlinePreview?.(window.todayStr?.());
   }
   function buildAssistantOfflineReply(text, error){
-    const canUseCloud = location.protocol !== 'file:';
-    if(!canUseCloud){
-      return '我现在是在本地 file 页面里，不能直接连 Netlify 的 AI 云函数，所以只能先用本地任务指令。部署到云端并配置 DEEPSEEK_API_KEY 后，我就能恢复完整智能对话。你仍然可以说“任务池挑三个”“提醒我…”“完成…”“延期到明天”等，我会直接操作任务。';
+    const triedCloud = assistantHasCloudAccess();
+    if(!triedCloud){
+      return '我现在还没有拿到可用的云端 AI 地址，所以先只能用本地任务指令。只要在设置里填好云端站点地址或 AI 接口地址，我就会直接尝试连接云端智能对话。你仍然可以说“任务池挑三个”“提醒我…”“完成…”“延期到明天”等，我会直接操作任务。';
     }
-    return `我这次没连上 AI 云函数（${String(error.message || error).slice(0,80)}）。我先保留本地任务处理能力：可以挑任务、安排今天、完成/延期/放回任务池；如果想恢复智能聊天，需要确认云端环境变量 DEEPSEEK_API_KEY 已配置。`;
+    return `我这次已经尝试连接云端 AI，但没有连上（${String(error.message || error).slice(0,80)}）。我先保留本地任务处理能力：可以挑任务、安排今天、完成/延期/放回任务池；如果想恢复智能聊天，需要确认云端站点地址可访问，并且云端环境变量 DEEPSEEK_API_KEY 已配置。`;
   }
   function openAssistantPanel(){
     hideOverlay(document.getElementById('chatOverlay'));
     hideOverlay(document.getElementById('v2CaptureOverlay'));
     const overlay = ensureAssistantPanel();
     renderAssistantPanelLog();
-    setAssistantStatus(location.protocol === 'file:' ? '本地页面：可用本地指令，云端 AI 需在线部署' : '准备就绪', 'idle');
+    setAssistantStatus(assistantHasCloudAccess() ? '准备就绪' : '本地页面：先填云端地址后可启用 AI 对话', 'idle');
     overlay.classList.add('show');
     setTimeout(() => document.getElementById('homeV2AssistantInput')?.focus(), 30);
     return true;
@@ -901,6 +973,7 @@
         </div>
         <div class="homev2-profile-grid">
           <button type="button" data-homev2-profile-action="settings"><span>⚙️</span><b>设置与偏好</b><small>模式、提醒、个人规则</small></button>
+          <button type="button" data-homev2-profile-action="cloud"><span>☁️</span><b>云端与 AI</b><small>API、备份、恢复</small></button>
           <button type="button" data-homev2-profile-action="planner"><span>🧭</span><b>长期规划习惯</b><small>目标、习惯、复盘</small></button>
           <button type="button" data-homev2-profile-action="backup"><span>📦</span><b>导出完整备份</b><small>保存到本机</small></button>
           <button type="button" data-homev2-profile-action="features"><span>✨</span><b>全部功能</b><small>快速进入各模块</small></button>
@@ -936,10 +1009,10 @@
           </div>
           <p class="homev2-cloud-status" id="homeV2SettingsStatus"></p>
         </div>
-        <div class="homev2-cloud-card">
+        <div class="homev2-cloud-card" id="homeV2CloudCard" hidden>
           <div class="homev2-cloud-head">
             <span>☁️</span>
-            <div><b>云端备份</b><small>填写自己的 JSONBin Bin ID 和 API Key，可手动上传或恢复。</small></div>
+            <div><b>云端备份与 AI 接口</b><small>这里保留你原来的 API、云端备份和恢复入口，需要时再展开就好。</small></div>
           </div>
           <label>云端站点地址<input id="homeV2CloudOrigin" autocomplete="off" placeholder="例如 https://你的站点.netlify.app"></label>
           <label>AI 聊天接口<input id="homeV2AiEndpoint" autocomplete="off" placeholder="可留空，默认 /.netlify/functions/ai-chat-v2"></label>
@@ -966,6 +1039,9 @@
       if(action === 'settings'){
         toggleProfileSettingsCard();
       }
+      if(action === 'cloud'){
+        toggleProfileCloudCard();
+      }
       if(action === 'planner') window.openPlannerPage?.();
       if(action === 'backup') (window.exportV2 || window.exportData)?.();
       if(action === 'features') openFeatureSheet();
@@ -984,6 +1060,8 @@
     const overlay = ensureProfilePanel();
     syncProfileSettingsForm();
     syncProfileCloudForm();
+    toggleProfileSettingsCard(false);
+    toggleProfileCloudCard(false);
     overlay.classList.add('show');
     return true;
   }
@@ -992,7 +1070,16 @@
     if(!card) return;
     const show = force === undefined ? card.hidden : !!force;
     card.hidden = !show;
+    if(show) toggleProfileCloudCard(false);
     if(show) syncProfileSettingsForm();
+  }
+  function toggleProfileCloudCard(force){
+    const card = document.getElementById('homeV2CloudCard');
+    if(!card) return;
+    const show = force === undefined ? card.hidden : !!force;
+    card.hidden = !show;
+    if(show) toggleProfileSettingsCard(false);
+    if(show) syncProfileCloudForm();
   }
   function setProfileSettingsStatus(text){
     const el = document.getElementById('homeV2SettingsStatus');
@@ -1072,7 +1159,7 @@
     const endpoint = document.getElementById('homeV2AiEndpoint');
     const bin = document.getElementById('homeV2CloudBinId');
     const key = document.getElementById('homeV2CloudApiKey');
-    if(origin) origin.value = ai.cloudOrigin || localStorage.getItem('task-cloud-origin') || '';
+    if(origin) origin.value = ai.cloudOrigin || localStorage.getItem('task-cloud-origin') || defaultCloudOrigin();
     if(endpoint) endpoint.value = ai.chatEndpoint || localStorage.getItem('task-ai-chat-endpoint') || '';
     if(bin) bin.value = cloud.binId || '';
     if(key) key.value = cloud.apiKey || '';
@@ -1354,8 +1441,7 @@
     try{
       if(typeof window.openModulePage === 'function'){
         window.openModulePage(sectionId);
-        if(routeHasContent(sectionId)) return true;
-        if(document.getElementById('v2RoutePage')?.classList.contains('show')) return true;
+        return true;
       }
     }catch(error){
       console.error('homev2 openModulePage failed', sectionId, error);
@@ -1436,32 +1522,11 @@
 
   function openSectionDirect(sectionId){
     const section = document.getElementById(sectionId);
-    const body = ensureDirectRouteShell();
-    if(!section || !body) return false;
-    closeDirectRoute();
-    const title = routeTitle(sectionId);
-    body.innerHTML = '';
-    document.getElementById('v2RouteTitle').textContent = title;
-    document.getElementById('v2RouteIcon').textContent = '';
-    document.querySelector('.app')?.classList.add('v2-hidden');
-    document.getElementById('v2RoutePage')?.classList.add('show');
-    body.innerHTML = `
-      <div class="v2-route-overview day v2-route-journal">
-        <div class="v2-route-overview-main">
-          <div>
-            <div class="v2-overview-eyebrow"><span>${title}</span></div>
-            <h3>这一页正在重新接回新版内容</h3>
-            <p>为了保护你已经做好的新版界面，我先不再搬旧页面结构，避免露出乱码或空白。返回首页后可以再进一次。</p>
-          </div>
-          <div class="v2-route-overview-progress">
-            <div class="v2-overview-ring"><strong>!</strong><span>保护中</span></div>
-            <div class="v2-overview-bar"><div class="v2-overview-bar-track"><span style="width:42%"></span></div><small>旧乱码结构已拦截</small></div>
-          </div>
-        </div>
-      </div>
-    `;
-    window.__homeV2DirectRouteState = null;
-    window.scrollTo(0, 0);
+    if(!section) return false;
+    const card = section.querySelector('.card');
+    section.classList.remove('collapsed');
+    if(card) card.classList.add('expanded');
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return true;
   }
 
@@ -1569,11 +1634,11 @@
     }, true);
   }
 
-  function ensureFloatingTools(){
-    let wrap = document.getElementById('homeV2FloatingTools');
-    if(!wrap){
-      wrap = document.createElement('div');
-      wrap.id = 'homeV2FloatingTools';
+function ensureFloatingTools(){
+  let wrap = document.getElementById('homeV2FloatingTools');
+  if(!wrap){
+    wrap = document.createElement('div');
+    wrap.id = 'homeV2FloatingTools';
       wrap.className = 'homev2-floating-tools';
       wrap.innerHTML = `
         <button class="homev2-floating-btn capture" type="button" data-homev2-action="capture">
@@ -1587,6 +1652,8 @@
       `;
       document.body.appendChild(wrap);
     }
+    wrap.setAttribute('aria-hidden','false');
+    wrap.style.display = 'flex';
     wrap.querySelectorAll('[data-homev2-action]').forEach(button => {
       button.onclick = () => triggerAction(button.dataset.homev2Action);
     });
@@ -1646,7 +1713,17 @@
             </div>
             <button class="homev2-pill" type="button" data-homev2-action="capture">拍照识别</button>
           </div>
+          <div class="homev2-desk-stickers">
+            <span class="homev2-desk-sticker mint">任务先收住</span>
+            <span class="homev2-desk-sticker butter">今天只做必要的</span>
+          </div>
           <textarea id="homeV2QuickText" class="homev2-quick-textarea" rows="2" placeholder="想到什么先写在这里：任务、灵感、备忘、今天要做的一件事..."></textarea>
+          <div class="homev2-quick-meta">
+            <input id="homeV2QuickTitle" type="text" placeholder="随手记标题，可不填">
+            <input id="homeV2QuickDate" type="date" value="${todayKey()}">
+            <input id="homeV2QuickStart" type="time" aria-label="开始时间">
+            <input id="homeV2QuickEnd" type="time" aria-label="结束时间">
+          </div>
           <div class="homev2-quick-actions">
             <button type="button" data-homev2-quick="today">加入今日</button>
             <button type="button" data-homev2-quick="pool">丢进任务池</button>
@@ -1656,6 +1733,7 @@
           <div class="homev2-desk-grid">
             <div class="homev2-mini-form">
               <div class="homev2-mini-form-title">快速记账</div>
+              <div class="homev2-mini-form-sub">保留常用分类，也可以自己临时写一个。</div>
               <div class="homev2-mini-line">
                 <select id="homeV2BillType" aria-label="账单类型">
                   <option value="expense">支出</option>
@@ -1668,10 +1746,12 @@
                 <input id="homeV2BillCategory" placeholder="分类，如餐饮/副业/退款">
                 <input id="homeV2BillNote" placeholder="备注可不填">
               </div>
+              <div class="homev2-bill-tags" id="homeV2BillCategoryList"></div>
               <button class="homev2-mini-submit" type="button" id="homeV2BillSave">记一笔</button>
             </div>
             <div class="homev2-mini-form">
               <div class="homev2-mini-form-title">任务池快丢</div>
+              <div class="homev2-mini-form-sub">先存下来，不急着今天做完。</div>
               <textarea id="homeV2PoolText" rows="3" placeholder="不确定哪天做的事，先放任务池。"></textarea>
               <button class="homev2-mini-submit" type="button" id="homeV2PoolSave">放进任务池</button>
             </div>
@@ -1857,6 +1937,7 @@
       });
     });
     document.getElementById('homeV2BillSave')?.addEventListener('click', saveHomeV2Bill);
+    document.getElementById('homeV2BillType')?.addEventListener('change', syncHomeBillCategorySuggestions);
     document.getElementById('homeV2PoolSave')?.addEventListener('click', saveHomeV2Pool);
     document.getElementById('homeV2PoolText')?.addEventListener('keydown', event => {
       if(event.key === 'Enter' && (event.ctrlKey || event.metaKey)){
@@ -1865,13 +1946,21 @@
       }
     });
 
-    const chatFab = document.getElementById('chatFab');
+    let chatFab = document.getElementById('chatFab');
+    if(!chatFab){
+      chatFab = document.createElement('button');
+      chatFab.id = 'chatFab';
+      chatFab.className = 'fab';
+      document.body.appendChild(chatFab);
+    }
+    window.buildQuickCaptureUI?.();
     if(chatFab){
       chatFab.innerHTML = `<img src="${asset('icons-collage-v2/icon-ai-review.png')}" alt="AI助手">`;
       chatFab.onclick = () => triggerAction('assistant');
     }
     const captureFab = document.getElementById('v2CaptureFab');
     if(captureFab) captureFab.innerHTML = `<img src="${asset('icons-collage-v2/icon-note.png')}" alt="智能识别">`;
+    syncHomeBillCategorySuggestions();
   }
 
   function patchRenderRefresh(){

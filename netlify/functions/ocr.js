@@ -30,7 +30,7 @@ exports.handler=async event=>{
       body:JSON.stringify({
         model:process.env.OPENAI_VISION_MODEL||'gpt-5.5',
         input:[{role:'user',content:[
-          {type:'input_text',text:'请准确转写这张图片里的中文或英文手写内容。保持原来的分行和清单结构；看不清的局部写作【无法辨认】，不要猜测，不要解释，只输出转写文字。'},
+          {type:'input_text',text:'请准确转写这张图片里的中文或英文手写内容，尤其注意日期、时间、清单和日程安排。保持原来的分行和清单结构；看不清的局部写作【无法辨认】，不要猜测，不要解释，只输出转写文字。'},
           {type:'input_image',image_url:imageDataUrl}
         ]}],
         max_output_tokens:1600

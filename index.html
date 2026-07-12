@@ -12,7 +12,7 @@
 <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
-<link rel="stylesheet" href="v2.css">
+<link rel="stylesheet" href="v2.css?v=20260710-fix-icons-1">
 <title>任务管家 V2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -461,7 +461,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
   </div>
 </div>
 
-<script>
+<script type="text/plain" data-disabled="legacy-mojibake-script">
 const SPRITE_FILES=['灏忕尗鍥炬爣.jpg','灏忕尗鍥炬爣锛?锛?jpg','灏忕尗鍥炬爣锛?锛?jpg','灏忕尗鍥炬爣锛?锛?jpg'];
 let spritesReady=false;
 const WDAY_NAMES={0:'Mon',1:'Tue',2:'Wed',3:'Thu',4:'Fri',5:'Sat',6:'Sun'};
@@ -1238,9 +1238,14 @@ function deleteNote(id){if(!confirm('鍒犻櫎姝ょ瑪璁帮紵'))return;appDat
 // ====== AI Review ======
 function renderReviews(){
   const c=document.getElementById('reviewsList');const items=appData.reviews||[];
-  if(!items.length){c.innerHTML='<div class="empty-tip">鏆傛棤澶嶇洏璁板綍</div>';return}
+  if(!items.length){c.innerHTML='<div class="empty-tip">暂时还没有复盘记录</div>';return}
   const sorted=[...items].sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  c.innerHTML=sorted.map(r=>`<div class="card"><div class="card-header" data-toggle><span class="caticon">馃搳</span><span class="title">${r.period} 路 ${r.startDate||''}~${r.endDate||''}</span><span style="font-size:11px;color:var(--text-l)">${r.createdAt?r.createdAt.slice(0,10):''}</span><span class="arrow">鈻?/span></div><div class="card-body"><div style="font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap">${esc(r.report)}</div><button onclick="deleteReview('${r.id}')" style="margin-top:8px;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:#fafcfa;cursor:pointer">馃棏 鍒犻櫎</button></div></div>`).join('');
+  c.innerHTML=sorted.map(r=>{
+    const text=String(r.report||'').trim();
+    const preview=text.length>120?`${text.slice(0,120)}...`:text||'这份复盘还没有内容。';
+    const period=`${r.period||'复盘'} ${r.startDate||''}${r.endDate?` ~ ${r.endDate}`:''}`.trim();
+    return `<details class="v2-review-legacy-item"><summary><div class="v2-review-legacy-head"><span class="v2-review-legacy-chip">复盘</span><div><strong>${esc(period)}</strong><small>${r.createdAt?r.createdAt.slice(0,10):''}</small></div></div><p>${esc(preview)}</p></summary><div class="v2-review-legacy-body"><div class="v2-review-legacy-report">${esc(text||'这份复盘还没有正文。')}</div><button onclick="deleteReview('${r.id}')" class="v2-review-legacy-delete">删除这份复盘</button></div></details>`;
+  }).join('');
 }
 function deleteReview(id){appData.reviews=appData.reviews.filter(r=>r.id!==id);renderReviews();toJSONBin()}
 document.getElementById('reviewPeriod').addEventListener('change',function(){
@@ -1505,7 +1510,8 @@ const isNativeTaskApp=!!(window.Capacitor&&typeof window.Capacitor.isNativePlatf
 // SW registration with update detection
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDailyReset()});
 if('serviceWorker'in navigator&&!isNativeTaskApp){
-  navigator.serviceWorker.register('sw.js').then(reg=>{
+  navigator.serviceWorker.register('sw.js?v=20260710-fix-icons-2').then(reg=>{
+    reg.update?.();
     reg.addEventListener('updatefound',()=>{
       const sw=reg.installing;
       sw.addEventListener('statechange',()=>{
@@ -1516,6 +1522,7 @@ if('serviceWorker'in navigator&&!isNativeTaskApp){
     });
   }).catch(()=>{});
   let refreshing=false;
+  window.addEventListener('focus',()=>navigator.serviceWorker.getRegistration().then(reg=>reg?.update?.()).catch(()=>{}));
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
     if(refreshing)return;
     refreshing=true;
@@ -1567,17 +1574,19 @@ function injectStaticIcons(){
 // V2 owns boot and persistence. The legacy initData() is deliberately not called.
 </script>
 <script src="ai-memory.js"></script>
-<script src="v2.js"></script>
-<link rel="stylesheet" href="homev2-shell.css">
-<script src="homev2-shell.js"></script>
+<script src="v2.js?v=20260710-fix-icons-1"></script>
+<link rel="stylesheet" href="homev2-shell.css?v=20260710-fix-icons-1">
+<script src="homev2-shell.js?v=20260710-fix-icons-1"></script>
 <script>
-loadSprites(()=>{
-  injectStaticIcons();
-  v2Boot();
+const bootV2App=()=>{
+  try{if(typeof injectStaticIcons==='function')injectStaticIcons();}catch(error){console.warn('legacy icon init skipped',error)}
+  try{if(typeof v2Boot==='function')v2Boot();}catch(error){console.error('v2 boot failed',error)}
   setTimeout(()=>window.HomeV2Shell?.render?.(),0);
   setTimeout(()=>window.HomeV2Shell?.render?.(),120);
   setTimeout(()=>window.HomeV2Shell?.render?.(),600);
-});
+};
+if(typeof loadSprites==='function')loadSprites(bootV2App);
+else bootV2App();
 </script>
 </body>
 </html>

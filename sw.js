@@ -1,5 +1,5 @@
-const CACHE = 'task-mgr-v2-20260702-2';
-const STATIC_ASSETS = ['./','./index.html','./manifest.json','./version.json','./icons/icon-192.png','./icons/icon-512.png','./quick-add.html','./v2.css','./ai-memory.js','./v2.js'];
+const CACHE = 'task-mgr-v2-20260710-5';
+const STATIC_ASSETS = ['./','./index.html','./manifest.json','./version.json','./icons/icon-192.png','./icons/icon-512.png','./quick-add.html','./v2.css','./ai-memory.js','./v2.js','./homev2-shell.css','./homev2-shell.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)));
@@ -25,8 +25,13 @@ self.addEventListener('fetch', e => {
 
   const url = new URL(u);
 
-  // Network First for index.html — always fetch fresh when online
-  if (url.pathname.endsWith('/v2/') || url.pathname.endsWith('/v2/index.html')) {
+  // Network First for app entry pages — always fetch fresh when online
+  if (
+    url.pathname === '/' ||
+    url.pathname.endsWith('/index.html') ||
+    url.pathname.endsWith('/v2/') ||
+    url.pathname.endsWith('/v2/index.html')
+  ) {
     e.respondWith(
       fetch(e.request)
         .then(res => {
